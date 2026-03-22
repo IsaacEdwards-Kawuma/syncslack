@@ -166,6 +166,7 @@ export async function listConversationMessages(conversationId, before, limit) {
      JOIN users u ON u.id = m.sender_id
      WHERE m.conversation_id = $1
        AND m.channel_id IS NULL
+       AND m.thread_parent_id IS NULL
        AND m.deleted_at IS NULL
        AND ($3::timestamptz IS NULL OR (m.created_at, m.id) < ($3::timestamptz, $4::uuid))
      ORDER BY m.created_at DESC, m.id DESC
@@ -223,6 +224,7 @@ export async function createConversationMessage({
   senderId,
   conversationId,
   content,
+  threadParentId,
   attachmentUrl,
   attachmentMime,
   attachments,
@@ -236,9 +238,9 @@ export async function createConversationMessage({
   const first = attList[0] || {};
   const r = await pool.query(
     `INSERT INTO messages (sender_id, channel_id, conversation_id, thread_parent_id, content, attachment_url, attachment_mime)
-     VALUES ($1, NULL, $2, NULL, $3, $4, $5)
+     VALUES ($1, NULL, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [senderId, conversationId, content, first.url || '', first.mime || '']
+    [senderId, conversationId, threadParentId || null, content, first.url || '', first.mime || '']
   );
   const id = r.rows[0].id;
   await insertAttachments(id, attList);

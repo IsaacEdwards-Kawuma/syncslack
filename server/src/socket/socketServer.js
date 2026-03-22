@@ -186,7 +186,15 @@ export function attachSocketIO(httpServer) {
     socket.on(
       'send_message',
       async (
-        { channelId, conversationId, content, threadParentId, attachmentUrl, attachmentMime, attachments },
+        {
+          channelId,
+          conversationId,
+          content,
+          threadParentId,
+          attachmentUrl,
+          attachmentMime,
+          attachments,
+        },
         cb
       ) => {
         try {
@@ -238,10 +246,24 @@ export function attachSocketIO(httpServer) {
               if (typeof cb === 'function') cb({ ok: false, error: check.error });
               return;
             }
+            let threadParent = null;
+            if (threadParentId) {
+              if (!isValidUuid(threadParentId)) {
+                if (typeof cb === 'function') cb({ ok: false, error: 'Invalid thread parent' });
+                return;
+              }
+              const parent = await messages.findMessageById(threadParentId);
+              if (!parent || parent.conversationId !== conversationId) {
+                if (typeof cb === 'function') cb({ ok: false, error: 'Invalid thread' });
+                return;
+              }
+              threadParent = threadParentId;
+            }
             const msg = await messages.createConversationMessage({
               senderId: userId,
               conversationId,
               content: text || (hasFile ? 'Attachment' : ''),
+              threadParentId: threadParent,
               attachments: attList,
             });
             const conv = check.conversation;

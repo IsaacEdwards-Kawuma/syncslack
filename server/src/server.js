@@ -19,6 +19,7 @@ import conversationRoutes from './routes/conversationRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import pushRoutes from './routes/pushRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Load .env from server/ regardless of process cwd. */
@@ -91,6 +92,7 @@ app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/push', pushRoutes);
 
 const io = attachSocketIO(httpServer);
 app.set('io', io);

@@ -105,6 +105,18 @@ export function getOtherParticipantId(conv, myUserId) {
   return String(conv.participant_low);
 }
 
+export async function addMembersToGroupConversation(conversationId, userIds) {
+  const conv = await findConversationById(conversationId);
+  if (!conv || conv.kind !== 'group') throw new Error('Not a group conversation');
+  for (const uid of userIds) {
+    await pool.query(
+      `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [conversationId, uid]
+    );
+  }
+  await touchConversationUpdatedAt(conversationId);
+}
+
 export async function touchConversationUpdatedAt(conversationId) {
   await pool.query(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
 }

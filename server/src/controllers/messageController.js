@@ -40,9 +40,17 @@ export async function listThreadReplies(req, res) {
       return res.status(400).json({ error: 'Invalid message id' });
     }
     const parent = await messages.findMessageById(messageId);
-    if (!parent || !parent.channelId) return res.status(404).json({ error: 'Message not found' });
-    const channel = await channels.findChannelById(parent.channelId);
-    if (!(await canAccessChannel(channel, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    if (!parent) return res.status(404).json({ error: 'Message not found' });
+    if (parent.channelId) {
+      const channel = await channels.findChannelById(parent.channelId);
+      if (!(await canAccessChannel(channel, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    } else if (parent.conversationId) {
+      if (!(await conversations.isConversationMember(parent.conversationId, req.user.sub))) {
+        return res.status(403).json({ error: 'Not allowed' });
+      }
+    } else {
+      return res.status(404).json({ error: 'Message not found' });
+    }
 
     const replies = await messages.listThreadReplies(messageId);
     return res.json({ replies });

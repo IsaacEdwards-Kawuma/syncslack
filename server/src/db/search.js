@@ -51,3 +51,52 @@ export async function searchWorkspaceMessages(workspaceId, userId, query, limit 
     conversationLabel: row.conv_label,
   }));
 }
+
+function safeLike(q) {
+  return String(q).trim().slice(0, 100).replace(/%/g, '').replace(/_/g, '');
+}
+
+export async function searchWorkspaceChannels(workspaceId, userId, query, limit = 20) {
+  const safe = safeLike(query);
+  if (!safe) return [];
+  const pattern = `%${safe}%`;
+  const r = await pool.query(
+    `SELECT c.id, c.name, c.type
+     FROM channels c
+     WHERE c.workspace_id = $1::uuid
+       AND c.name ILIKE $2
+       AND (
+         c.type = 'public'
+         OR EXISTS (SELECT 1 FROM channel_members cm WHERE cm.channel_id = c.id AND cm.user_id = $3::uuid)
+       )
+     ORDER BY c.name ASC
+     LIMIT $4`,
+    [workspaceId, pattern, userId, limit]
+  );
+  return r.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    type: row.type,
+  }));
+}
+
+export async function searchWorkspacePeople(workspaceId, query, limit = 20) {
+  const safe = safeLike(query);
+  if (!safe) return [];
+  const pattern = `%${safe}%`;
+  const r = await pool.query(
+    `SELECT u.id, u.name, u.email, u.avatar_url
+     FROM users u
+     INNER JOIN workspace_members wm ON wm.user_id = u.id AND wm.workspace_id = $1::uuid
+     WHERE (u.name ILIKE $2 OR u.email ILIKE $2)
+     ORDER BY u.name ASC
+     LIMIT $3`,
+    [workspaceId, pattern, limit]
+  );
+  return r.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    avatarUrl: row.avatar_url || '',
+  }));
+}

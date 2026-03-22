@@ -40,6 +40,18 @@ export default function Workspace() {
   const [groupTitle, setGroupTitle] = useState('');
   const [showAdmin, setShowAdmin] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
+  const [searchTab, setSearchTab] = useState('messages');
+  const [channelSearchResults, setChannelSearchResults] = useState([]);
+  const [peopleSearchResults, setPeopleSearchResults] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [pwdCurrent, setPwdCurrent] = useState('');
+  const [pwdNew, setPwdNew] = useState('');
+  const [showCall, setShowCall] = useState(false);
+  const [auditRows, setAuditRows] = useState([]);
+  const [transferUserId, setTransferUserId] = useState('');
+  const [showAddGroup, setShowAddGroup] = useState(false);
+  const [addGroupPick, setAddGroupPick] = useState(() => new Set());
+  const [showMention, setShowMention] = useState(false);
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -130,17 +142,37 @@ export default function Workspace() {
   }, [workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !searchQ.trim() || searchQ.trim().length < 2) {
+    if (!workspaceId || !searchQ.trim()) {
       setSearchResults([]);
+      setChannelSearchResults([]);
+      setPeopleSearchResults([]);
       return;
     }
+    const q = searchQ.trim();
     const t = setTimeout(() => {
-      api(`/workspaces/${workspaceId}/search?q=${encodeURIComponent(searchQ.trim())}`)
-        .then((d) => setSearchResults(d.results || []))
+      const enc = encodeURIComponent(q);
+      if (searchTab === 'messages') {
+        if (q.length < 2) {
+          setSearchResults([]);
+          return;
+        }
+        api(`/workspaces/${workspaceId}/search?q=${enc}&type=messages`)
+          .then((d) => setSearchResults(d.results || []))
+          .catch(console.error);
+        return;
+      }
+      if (searchTab === 'channels') {
+        api(`/workspaces/${workspaceId}/search?q=${enc}&type=channels`)
+          .then((d) => setChannelSearchResults(d.results || []))
+          .catch(console.error);
+        return;
+      }
+      api(`/workspaces/${workspaceId}/search?q=${enc}&type=people`)
+        .then((d) => setPeopleSearchResults(d.results || []))
         .catch(console.error);
     }, 350);
     return () => clearTimeout(t);
-  }, [searchQ, workspaceId]);
+  }, [searchQ, workspaceId, searchTab]);
 
   useEffect(() => {
     if (!socket || !connected || !workspaceId) return undefined;
@@ -256,15 +288,26 @@ export default function Workspace() {
   }, [conversationId, channelId]);
 
   useEffect(() => {
-    if (!threadParent || !channelId) {
+    if (!threadParent) {
       setThreadReplies([]);
       return;
     }
-    (async () => {
-      const { replies } = await api(`/messages/channel/${channelId}/thread/${threadParent.id}`);
-      setThreadReplies(replies);
-    })().catch(console.error);
-  }, [threadParent, channelId]);
+    if (channelId) {
+      (async () => {
+        const { replies } = await api(`/messages/channel/${channelId}/thread/${threadParent.id}`);
+        setThreadReplies(replies);
+      })().catch(console.error);
+      return;
+    }
+    if (conversationId) {
+      (async () => {
+        const { replies } = await api(`/messages/conversation/${conversationId}/thread/${threadParent.id}`);
+        setThreadReplies(replies);
+      })().catch(console.error);
+      return;
+    }
+    setThreadReplies([]);
+  }, [threadParent, channelId, conversationId]);
 
   function emitTyping(isTyping) {
     if (!socket) return;
@@ -294,12 +337,14 @@ export default function Workspace() {
       if (threadParent) payload.threadParentId = threadParent.id;
     } else if (conversationId) {
       payload.conversationId = conversationId;
+      if (threadParent) payload.threadParentId = threadParent.id;
     } else return;
 
     socket.emit('send_message', payload, (res) => {
       if (!res?.ok) console.error(res?.error);
     });
     setInput('');
+    setShowMention(false);
     emitTyping(false);
   }
 
@@ -622,15 +667,41 @@ export default function Workspace() {
       <main className="flex min-w-0 flex-1 flex-col bg-white dark:bg-slate-900">
         <header className="relative flex h-14 shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 px-4 dark:border-slate-700">
           <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{headerTitle}</h1>
+          {groupConv && conversationId ? (
+            <button
+              type="button"
+              className="shrink-0 rounded px-2 py-1 text-xs text-violet-700 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-[#522653]/40"
+              onClick={() => {
+                setShowAddGroup(true);
+                setAddGroupPick(new Set());
+              }}
+            >
+              Add people
+            </button>
+          ) : null}
           {typingName ? <span className="text-sm text-slate-500">{typingName} is typing…</span> : null}
+          <div className="flex flex-wrap items-center gap-1">
+            {(['messages', 'channels', 'people']).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                className={`rounded px-2 py-0.5 text-[10px] uppercase ${
+                  searchTab === tab ? 'bg-violet-600 text-white' : 'bg-slate-200 dark:bg-slate-700'
+                }`}
+                onClick={() => setSearchTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
           <input
             type="search"
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
-            placeholder="Search messages…"
+            placeholder={searchTab === 'messages' ? 'Search messages…' : searchTab === 'channels' ? 'Channels…' : 'People…'}
             className="w-40 rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 sm:w-48"
           />
-          {searchResults.length > 0 && searchQ.trim().length >= 2 ? (
+          {searchTab === 'messages' && searchResults.length > 0 && searchQ.trim().length >= 2 ? (
             <div className="absolute right-4 top-14 z-40 max-h-64 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-lg dark:border-slate-600 dark:bg-slate-800">
               {searchResults.map((r) => (
                 <button
@@ -672,6 +743,64 @@ export default function Workspace() {
               ))}
             </div>
           ) : null}
+          {searchTab === 'channels' && channelSearchResults.length > 0 && searchQ.trim().length >= 1 ? (
+            <div className="absolute right-4 top-14 z-40 max-h-64 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-lg dark:border-slate-600 dark:bg-slate-800">
+              {channelSearchResults.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="block w-full truncate rounded px-2 py-1 text-left hover:bg-slate-100 dark:hover:bg-slate-700"
+                  onClick={() => {
+                    setGroupConv(null);
+                    setDmPeer(null);
+                    setConversationId(null);
+                    setChannelId(r.id);
+                    setSearchQ('');
+                    setChannelSearchResults([]);
+                  }}
+                >
+                  {r.type === 'private' ? '🔒 ' : '#'}
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {searchTab === 'people' && peopleSearchResults.length > 0 && searchQ.trim().length >= 1 ? (
+            <div className="absolute right-4 top-14 z-40 max-h-64 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-lg dark:border-slate-600 dark:bg-slate-800">
+              {peopleSearchResults.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="block w-full truncate rounded px-2 py-1 text-left hover:bg-slate-100 dark:hover:bg-slate-700"
+                  onClick={() => {
+                    if (r.id === user.id) return;
+                    openDm(r.id);
+                    setSearchQ('');
+                    setPeopleSearchResults([]);
+                  }}
+                >
+                  {r.name} <span className="text-slate-400">{r.email}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {(channelId || conversationId) && workspaceId ? (
+            <button
+              type="button"
+              className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+              title="Video call (opens Jitsi)"
+              onClick={() => setShowCall(true)}
+            >
+              Call
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+            onClick={() => setShowSettings(true)}
+          >
+            ⚙️
+          </button>
           <div className="relative">
             <button
               type="button"
@@ -720,6 +849,15 @@ export default function Workspace() {
               onClick={() => {
                 setShowAdmin(true);
                 setInviteUrl('');
+                (async () => {
+                  try {
+                    const { audit } = await api(`/workspaces/${workspaceId}/audit`);
+                    setAuditRows(audit || []);
+                  } catch (e) {
+                    console.error(e);
+                    setAuditRows([]);
+                  }
+                })();
               }}
             >
               Admin
@@ -751,6 +889,7 @@ export default function Workspace() {
                   onThread={() => {
                     setThreadParent(m);
                     if (m.channelId) setChannelId(m.channelId);
+                    if (m.conversationId) setConversationId(m.conversationId);
                   }}
                 />
               ))}
@@ -767,23 +906,54 @@ export default function Workspace() {
                 >
                   📎
                 </button>
-                <input
-                  value={input}
-                  onChange={onInputChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage();
+                <div className="relative flex min-w-0 flex-1 gap-1">
+                  <button
+                    type="button"
+                    className="shrink-0 rounded border border-slate-200 px-2 py-2 text-sm dark:border-slate-600"
+                    title="Mention someone"
+                    disabled={!channelId && !conversationId}
+                    onClick={() => setShowMention((v) => !v)}
+                  >
+                    @
+                  </button>
+                  {showMention && (channelId || conversationId) ? (
+                    <div className="absolute bottom-full left-0 z-30 mb-1 max-h-48 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-600 dark:bg-slate-800">
+                      {members
+                        .filter((m) => m.id !== user.id)
+                        .map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            className="block w-full truncate px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-700"
+                            onClick={() => {
+                              const uid = String(m.id).toLowerCase();
+                              setInput((prev) => `${prev}@${uid} `);
+                              setShowMention(false);
+                            }}
+                          >
+                            {m.name}
+                          </button>
+                        ))}
+                    </div>
+                  ) : null}
+                  <input
+                    value={input}
+                    onChange={onInputChange}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                      }
+                    }}
+                    placeholder={
+                      channelId || conversationId
+                        ? `Message ${channelId ? 'the channel' : groupConv?.title || dmPeer?.name || 'group'} — @ inserts mention`
+                        : 'Select a channel'
                     }
-                  }}
-                  placeholder={
-                    channelId || conversationId
-                      ? `Message ${channelId ? 'the channel' : groupConv?.title || dmPeer?.name || 'group'} — mention: @user-uuid`
-                      : 'Select a channel'
-                  }
-                  disabled={!channelId && !conversationId}
-                  className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
-                />
+                    disabled={!channelId && !conversationId}
+                    className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => sendMessage()}
@@ -796,7 +966,7 @@ export default function Workspace() {
             </div>
           </div>
 
-          {threadParent && channelId ? (
+          {threadParent && (channelId || conversationId) ? (
             <aside className="w-80 shrink-0 border-l border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950">
               <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-700">
                 <span className="text-sm font-semibold">Thread</span>
@@ -825,11 +995,10 @@ export default function Workspace() {
                     e.preventDefault();
                     const text = e.currentTarget.value.trim();
                     if (!text || !socket) return;
-                    socket.emit(
-                      'send_message',
-                      { channelId, content: text, threadParentId: threadParent.id },
-                      () => {}
-                    );
+                    const payload = { content: text, threadParentId: threadParent.id };
+                    if (channelId) payload.channelId = channelId;
+                    else if (conversationId) payload.conversationId = conversationId;
+                    socket.emit('send_message', payload, () => {});
                     e.currentTarget.value = '';
                   }}
                 />
@@ -1016,17 +1185,227 @@ export default function Workspace() {
                 </div>
               ))}
             </div>
+            <div className="max-h-40 overflow-y-auto border-t border-slate-200 pt-2 dark:border-slate-600">
+              <div className="font-semibold">Audit log</div>
+              {auditRows.length === 0 ? (
+                <p className="text-slate-500">No entries</p>
+              ) : (
+                auditRows.map((row) => (
+                  <div key={row.id} className="border-b border-slate-100 py-1 text-xs dark:border-slate-700">
+                    <span className="text-slate-500">{formatTime(row.createdAt)}</span> {row.action}
+                    {row.meta && Object.keys(row.meta).length ? ` ${JSON.stringify(row.meta)}` : ''}
+                  </div>
+                ))
+              )}
+            </div>
+            {myRole === 'owner' ? (
+              <div className="border-t border-slate-200 pt-2 dark:border-slate-600">
+                <div className="font-semibold">Transfer ownership</div>
+                <select
+                  value={transferUserId}
+                  onChange={(e) => setTransferUserId(e.target.value)}
+                  className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+                >
+                  <option value="">Select member…</option>
+                  {members
+                    .filter((m) => m.id !== user.id && m.role !== 'owner')
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  type="button"
+                  className="mt-2 rounded bg-amber-700 px-3 py-1.5 text-white"
+                  onClick={async () => {
+                    if (!transferUserId || !confirm('Transfer ownership to this member?')) return;
+                    try {
+                      await api(`/workspaces/${workspaceId}/transfer`, {
+                        method: 'POST',
+                        body: { newOwnerUserId: transferUserId },
+                      });
+                      setTransferUserId('');
+                      const { members: next } = await api(`/messages/workspace/${workspaceId}/members`);
+                      setMembers(next);
+                      const { audit: auditNext } = await api(`/workspaces/${workspaceId}/audit`);
+                      setAuditRows(auditNext || []);
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}
+                >
+                  Transfer
+                </button>
+              </div>
+            ) : null}
           </div>
+        </Modal>
+      ) : null}
+
+      {showCall && workspaceId ? (
+        <Modal title="Video call" wide onClose={() => setShowCall(false)}>
+          <p className="mb-2 text-xs text-slate-500">
+            Opens a Jitsi room shared with this channel or conversation. Others can join with the same room name.
+          </p>
+          <iframe
+            title="Jitsi call"
+            src={`https://meet.jit.si/syncwork-${workspaceId}-${channelId || conversationId || 'lobby'}#config.prejoinPageEnabled=false`}
+            className="h-[min(70vh,420px)] w-full rounded-lg border border-slate-200 bg-black dark:border-slate-600"
+            allow="camera; microphone; display-capture; autoplay"
+          />
+        </Modal>
+      ) : null}
+
+      {showSettings ? (
+        <Modal
+          title="Account & workspace"
+          onClose={() => {
+            setShowSettings(false);
+            setPwdCurrent('');
+            setPwdNew('');
+          }}
+        >
+          <form
+            className="space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await api('/auth/change-password', {
+                  method: 'POST',
+                  body: { currentPassword: pwdCurrent, newPassword: pwdNew },
+                });
+                setPwdCurrent('');
+                setPwdNew('');
+                setToast({ text: 'Password updated' });
+                setTimeout(() => setToast(null), 4000);
+              } catch (err) {
+                setToast({ text: err.message || 'Could not change password' });
+                setTimeout(() => setToast(null), 5000);
+              }
+            }}
+          >
+            <div className="text-sm font-semibold">Change password</div>
+            <input
+              type="password"
+              value={pwdCurrent}
+              onChange={(e) => setPwdCurrent(e.target.value)}
+              className="w-full rounded border border-slate-200 px-3 py-2 dark:border-slate-600 dark:bg-slate-800"
+              placeholder="Current password"
+              autoComplete="current-password"
+            />
+            <input
+              type="password"
+              value={pwdNew}
+              onChange={(e) => setPwdNew(e.target.value)}
+              className="w-full rounded border border-slate-200 px-3 py-2 dark:border-slate-600 dark:bg-slate-800"
+              placeholder="New password (8+ characters)"
+              autoComplete="new-password"
+            />
+            <button type="submit" className="w-full rounded bg-violet-700 py-2 text-white">
+              Update password
+            </button>
+          </form>
+          {workspaceId && myRole !== 'owner' ? (
+            <button
+              type="button"
+              className="mt-4 w-full rounded border border-red-300 py-2 text-red-700 dark:border-red-800 dark:text-red-400"
+              onClick={async () => {
+                if (!confirm('Leave this workspace? You will need an invite to rejoin.')) return;
+                try {
+                  await api(`/workspaces/${workspaceId}/leave`, { method: 'POST' });
+                  setShowSettings(false);
+                  await refetchWorkspaces();
+                } catch (e) {
+                  console.error(e);
+                  setToast({ text: e.message || 'Could not leave' });
+                  setTimeout(() => setToast(null), 4000);
+                }
+              }}
+            >
+              Leave workspace
+            </button>
+          ) : null}
+          {myRole === 'owner' ? (
+            <p className="mt-3 text-xs text-slate-500">
+              To leave the workspace, transfer ownership in Admin first, then leave from here if you are no longer owner.
+            </p>
+          ) : null}
+        </Modal>
+      ) : null}
+
+      {showAddGroup && conversationId && groupConv ? (
+        <Modal
+          title="Add people to group"
+          onClose={() => {
+            setShowAddGroup(false);
+            setAddGroupPick(new Set());
+          }}
+        >
+          <div className="max-h-48 space-y-1 overflow-y-auto text-sm">
+            {members
+              .filter((m) => !groupConv.participants?.some((p) => p.id === m.id))
+              .map((m) => (
+                <label
+                  key={m.id}
+                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={addGroupPick.has(m.id)}
+                    onChange={() => {
+                      setAddGroupPick((prev) => {
+                        const n = new Set(prev);
+                        if (n.has(m.id)) n.delete(m.id);
+                        else n.add(m.id);
+                        return n;
+                      });
+                    }}
+                  />
+                  <Avatar user={m} size={8} />
+                  {m.name}
+                </label>
+              ))}
+          </div>
+          {members.filter((m) => !groupConv.participants?.some((p) => p.id === m.id)).length === 0 ? (
+            <p className="text-sm text-slate-500">Everyone in the workspace is already in this group.</p>
+          ) : null}
+          <button
+            type="button"
+            className="mt-3 w-full rounded bg-violet-700 py-2 text-white"
+            onClick={async () => {
+              const userIds = [...addGroupPick];
+              if (!userIds.length || !workspaceId) return;
+              try {
+                await api(`/conversations/conversation/${conversationId}/members`, {
+                  method: 'POST',
+                  body: { userIds },
+                });
+                const { conversations: convs } = await api(`/conversations/workspace/${workspaceId}/conversations`);
+                setConversations(convs);
+                const cv = convs.find((c) => c.id === conversationId);
+                if (cv) setGroupConv({ title: cv.title, participants: cv.participants });
+                setShowAddGroup(false);
+                setAddGroupPick(new Set());
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+          >
+            Add to group
+          </button>
         </Modal>
       ) : null}
     </div>
   );
 }
 
-function Modal({ title, children, onClose }) {
+function Modal({ title, children, onClose, wide }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800">
+      <div
+        className={`w-full ${wide ? 'max-w-4xl' : 'max-w-md'} rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800`}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>
           <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-800">
@@ -1122,7 +1501,7 @@ function MessageBlock({ message, selfId, onReaction, onThread, compact }) {
               {em}
             </button>
           ))}
-          {message.channelId && !message.threadParentId ? (
+          {(message.channelId || message.conversationId) && !message.threadParentId ? (
             <button type="button" className="text-xs text-violet-600 hover:underline" onClick={onThread}>
               Thread
             </button>

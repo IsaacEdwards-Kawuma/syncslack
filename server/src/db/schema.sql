@@ -182,3 +182,13 @@ CREATE INDEX IF NOT EXISTS idx_conv_members_user ON conversation_members(user_id
 
 ALTER TABLE workspace_invites DROP CONSTRAINT IF EXISTS workspace_invites_role_check;
 ALTER TABLE workspace_invites ADD CONSTRAINT workspace_invites_role_check CHECK (role IN ('admin', 'member'));
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL,
+  keys JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, endpoint)
+);
+CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);

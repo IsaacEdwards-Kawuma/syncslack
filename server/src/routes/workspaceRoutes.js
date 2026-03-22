@@ -10,6 +10,8 @@ import {
   updateWorkspaceMember,
   removeWorkspaceMember,
   listWorkspaceAudit,
+  leaveWorkspace,
+  transferWorkspaceOwnership,
 } from '../controllers/workspaceController.js';
 import { authMiddleware } from '../middleware/auth.js';
 
@@ -19,6 +21,8 @@ r.post('/', createWorkspace);
 r.get('/', listMyWorkspaces);
 r.post('/join', joinWorkspace);
 r.post('/join-invite', joinByInvite);
+r.post('/:workspaceId/leave', leaveWorkspace);
+r.post('/:workspaceId/transfer', transferWorkspaceOwnership);
 r.get('/:workspaceId/search', searchWorkspace);
 r.post('/:workspaceId/invites', createWorkspaceInvite);
 r.get('/:workspaceId/audit', listWorkspaceAudit);

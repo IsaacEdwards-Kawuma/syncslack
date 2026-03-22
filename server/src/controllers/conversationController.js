@@ -131,3 +131,40 @@ export async function createGroupConversationHandler(req, res) {
     return res.status(500).json({ error: err.message || 'Failed to create group' });
   }
 }
+
+export async function addGroupMembersHandler(req, res) {
+  try {
+    const { conversationId } = req.params;
+    const { userIds } = req.body;
+    if (!isValidUuid(conversationId)) return res.status(400).json({ error: 'Invalid conversation id' });
+    if (!Array.isArray(userIds) || !userIds.length) {
+      return res.status(400).json({ error: 'userIds array required' });
+    }
+    const conv = await conversations.findConversationById(conversationId);
+    if (!conv || conv.kind !== 'group') {
+      return res.status(400).json({ error: 'Not a group conversation' });
+    }
+    if (!(await conversations.isConversationMember(conversationId, req.user.sub))) {
+      return res.status(403).json({ error: 'Not a participant' });
+    }
+    const wsId = conv.workspace_id;
+    for (const uid of userIds) {
+      if (!isValidUuid(uid)) return res.status(400).json({ error: 'Invalid user id' });
+      if (!(await workspaces.isMember(wsId, uid))) {
+        return res.status(400).json({ error: 'User must be in workspace' });
+      }
+    }
+    await conversations.addMembersToGroupConversation(conversationId, userIds);
+    const memberList = await conversations.listConversationMemberIds(conversationId);
+    const userRows = await users.findUsersByIds(memberList);
+    return res.json({
+      conversation: {
+        id: conv.id,
+        participants: userRows.map(formatPeer),
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to add members' });
+  }
+}

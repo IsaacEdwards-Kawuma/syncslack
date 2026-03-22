@@ -2,7 +2,11 @@ import slugify from '../utils/slugify.js';
 import * as workspaces from '../db/workspaces.js';
 import * as invites from '../db/invites.js';
 import * as audit from '../db/audit.js';
-import { searchWorkspaceMessages } from '../db/search.js';
+import {
+  searchWorkspaceMessages,
+  searchWorkspaceChannels,
+  searchWorkspacePeople,
+} from '../db/search.js';
 import { publicAppBaseUrl } from '../utils/mail.js';
 import { isValidUuid } from '../utils/ids.js';
 
@@ -154,18 +158,77 @@ export async function searchWorkspace(req, res) {
   try {
     const { workspaceId } = req.params;
     const q = req.query.q;
+    const type = (req.query.type || 'messages').toLowerCase();
     if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace id' });
-    if (!q || String(q).trim().length < 2) {
-      return res.json({ results: [] });
+    if (!q || String(q).trim().length < 1) {
+      return res.json({ results: [], type });
     }
     if (!(await workspaces.isMember(workspaceId, req.user.sub))) {
       return res.status(403).json({ error: 'Not a member' });
     }
-    const results = await searchWorkspaceMessages(workspaceId, req.user.sub, String(q).trim(), 40);
-    return res.json({ results });
+    const trimmed = String(q).trim();
+    if (type === 'channels') {
+      const results = await searchWorkspaceChannels(workspaceId, req.user.sub, trimmed, 30);
+      return res.json({ results, type: 'channels' });
+    }
+    if (type === 'people' || type === 'members') {
+      const results = await searchWorkspacePeople(workspaceId, trimmed, 30);
+      return res.json({ results, type: 'people' });
+    }
+    if (trimmed.length < 2) {
+      return res.json({ results: [], type: 'messages' });
+    }
+    const results = await searchWorkspaceMessages(workspaceId, req.user.sub, trimmed, 40);
+    return res.json({ results, type: 'messages' });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Search failed' });
+  }
+}
+
+export async function leaveWorkspace(req, res) {
+  try {
+    const { workspaceId } = req.params;
+    if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace id' });
+    const userId = req.user.sub;
+    const role = await workspaces.getMemberRole(workspaceId, userId);
+    if (!role) return res.status(404).json({ error: 'Not a member' });
+    if (role === 'owner') {
+      return res.status(400).json({ error: 'Transfer ownership before leaving' });
+    }
+    await workspaces.removeMember(workspaceId, userId);
+    await audit.logAction({
+      workspaceId,
+      actorId: userId,
+      action: 'member_left',
+      meta: {},
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to leave' });
+  }
+}
+
+export async function transferWorkspaceOwnership(req, res) {
+  try {
+    const { workspaceId } = req.params;
+    const { newOwnerUserId } = req.body;
+    if (!isValidUuid(workspaceId) || !isValidUuid(newOwnerUserId)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const ok = await workspaces.transferOwnership(workspaceId, req.user.sub, newOwnerUserId);
+    if (!ok) return res.status(400).json({ error: 'Transfer failed' });
+    await audit.logAction({
+      workspaceId,
+      actorId: req.user.sub,
+      action: 'ownership_transferred',
+      meta: { newOwnerUserId },
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Transfer failed' });
   }
 }
 

@@ -125,6 +125,37 @@ export async function addMember(workspaceId, userId, role = 'member') {
   );
 }
 
+export async function transferOwnership(workspaceId, oldOwnerId, newOwnerId) {
+  if (String(oldOwnerId) === String(newOwnerId)) return false;
+  const ws = await findWorkspaceById(workspaceId);
+  if (!ws || String(ws.owner_id) !== String(oldOwnerId)) return false;
+  if (!(await isMember(workspaceId, newOwnerId))) return false;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`UPDATE workspaces SET owner_id = $2, updated_at = NOW() WHERE id = $1 AND owner_id = $3`, [
+      workspaceId,
+      newOwnerId,
+      oldOwnerId,
+    ]);
+    await client.query(
+      `UPDATE workspace_members SET role = 'admin' WHERE workspace_id = $1 AND user_id = $2 AND role = 'owner'`,
+      [workspaceId, oldOwnerId]
+    );
+    await client.query(
+      `UPDATE workspace_members SET role = 'owner' WHERE workspace_id = $1 AND user_id = $2`,
+      [workspaceId, newOwnerId]
+    );
+    await client.query('COMMIT');
+    return true;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export function formatWorkspace(row, membersRows) {
   return {
     id: row.id,
