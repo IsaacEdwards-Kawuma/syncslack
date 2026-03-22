@@ -679,6 +679,18 @@ export default function Workspace() {
           ) : null}
         </div>
 
+        <div className="shrink-0 border-b border-[#522653] px-2 py-1.5 dark:border-slate-700">
+          <Link
+            to="/settings"
+            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-[#d1d2d3] hover:bg-white/10"
+          >
+            <span className="text-base leading-none" aria-hidden>
+              ⚙️
+            </span>
+            <span className="font-medium">Settings</span>
+          </Link>
+        </div>
+
         <div className="flex-1 overflow-y-auto px-2 py-2">
           <div className="px-2 text-xs font-semibold uppercase tracking-wide text-[#b39fb3]">Channels</div>
           {channels.map((c) => (
@@ -766,9 +778,6 @@ export default function Workspace() {
               <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs">
                 <Link to="/profile" className="text-[#b39fb3] hover:underline">
                   Profile
-                </Link>
-                <Link to="/settings" className="text-[#b39fb3] hover:underline">
-                  Settings
                 </Link>
                 <Link to="/help" className="text-[#b39fb3] hover:underline">
                   Help
