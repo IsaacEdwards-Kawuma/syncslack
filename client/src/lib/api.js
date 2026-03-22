@@ -1,10 +1,23 @@
 const TOKEN_KEY = 'syncwork_token';
 
+/**
+ * Default Render API when the app is served on Vercel but VITE_API_URL was not set in the dashboard.
+ * Set VITE_API_URL in production to override. Local dev: empty (Vite proxy → localhost:5000).
+ */
+const RENDER_API_FALLBACK = 'https://syncslack.onrender.com';
+
 /** Base URL of the API (Render), no trailing slash. Empty = same origin (Vite dev proxy). */
 export function getApiBaseUrl() {
   const raw = import.meta.env.VITE_API_URL;
-  if (!raw || typeof raw !== 'string') return '';
-  return raw.replace(/\/$/, '');
+  if (raw && typeof raw === 'string') return raw.replace(/\/$/, '');
+  if (typeof window !== 'undefined' && import.meta.env.PROD) {
+    const h = window.location.hostname;
+    if (h === 'localhost' || h === '127.0.0.1') return '';
+    if (h.endsWith('vercel.app') || h.endsWith('vercel.dev')) {
+      return RENDER_API_FALLBACK;
+    }
+  }
+  return '';
 }
 
 /** Turn `/uploads/...` into full URL when the API is on another host (production). */
