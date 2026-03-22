@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
@@ -16,7 +16,6 @@ function formatTime(d) {
 
 export default function Workspace() {
   const { user, logout, setTheme } = useAuth();
-  const navigate = useNavigate();
   const { socket, connected } = useSocket();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -569,6 +568,117 @@ export default function Workspace() {
           <div className="mt-1 truncate text-xs text-[#b39fb3]">{user?.email}</div>
         </div>
 
+        <div className="relative border-b border-[#522653] px-2 py-2 dark:border-slate-700">
+          <div className="mb-1.5 flex flex-wrap gap-1">
+            {['messages', 'channels', 'people'].map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                className={`rounded px-2 py-0.5 text-[10px] uppercase ${
+                  searchTab === tab
+                    ? 'bg-[#1164a3] text-white'
+                    : 'bg-white/10 text-[#d1d2d3] hover:bg-white/15'
+                }`}
+                onClick={() => setSearchTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          <input
+            type="search"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder={
+              searchTab === 'messages' ? 'Search messages…' : searchTab === 'channels' ? 'Channels…' : 'People…'
+            }
+            className="w-full rounded border border-[#522653] bg-black/20 px-2 py-1.5 text-xs text-[#d1d2d3] placeholder:text-[#b39fb3] focus:border-[#1164a3] focus:outline-none focus:ring-1 focus:ring-[#1164a3]"
+          />
+          {searchTab === 'messages' && searchResults.length > 0 && searchQ.trim().length >= 2 ? (
+            <div className="absolute left-2 right-2 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded border border-[#522653] bg-[#350d36] p-2 text-xs shadow-xl dark:border-slate-600 dark:bg-slate-800">
+              {searchResults.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="block w-full truncate rounded px-2 py-1 text-left text-[#d1d2d3] hover:bg-white/10"
+                  onClick={() => {
+                    (async () => {
+                      if (r.channelId) {
+                        setGroupConv(null);
+                        setDmPeer(null);
+                        setConversationId(null);
+                        setChannelId(r.channelId);
+                      } else if (r.conversationId && workspaceId) {
+                        setChannelId(null);
+                        const { conversations: convs } = await api(
+                          `/conversations/workspace/${workspaceId}/conversations`
+                        );
+                        setConversations(convs);
+                        const cv = convs.find((c) => c.id === r.conversationId);
+                        if (cv) {
+                          if (cv.kind === 'group') {
+                            setGroupConv({ title: cv.title, participants: cv.participants });
+                            setDmPeer(null);
+                          } else {
+                            setGroupConv(null);
+                            setDmPeer(cv.otherUser);
+                          }
+                        }
+                        setConversationId(r.conversationId);
+                      }
+                      setSearchQ('');
+                      setSearchResults([]);
+                    })().catch(console.error);
+                  }}
+                >
+                  {r.channelName ? `#${r.channelName}` : r.conversationLabel || 'DM'} — {r.content?.slice(0, 80)}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {searchTab === 'channels' && channelSearchResults.length > 0 && searchQ.trim().length >= 1 ? (
+            <div className="absolute left-2 right-2 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded border border-[#522653] bg-[#350d36] p-2 text-xs shadow-xl dark:border-slate-600 dark:bg-slate-800">
+              {channelSearchResults.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="block w-full truncate rounded px-2 py-1 text-left text-[#d1d2d3] hover:bg-white/10"
+                  onClick={() => {
+                    setGroupConv(null);
+                    setDmPeer(null);
+                    setConversationId(null);
+                    setChannelId(r.id);
+                    setSearchQ('');
+                    setChannelSearchResults([]);
+                  }}
+                >
+                  {r.type === 'private' ? '🔒 ' : '#'}
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {searchTab === 'people' && peopleSearchResults.length > 0 && searchQ.trim().length >= 1 ? (
+            <div className="absolute left-2 right-2 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded border border-[#522653] bg-[#350d36] p-2 text-xs shadow-xl dark:border-slate-600 dark:bg-slate-800">
+              {peopleSearchResults.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="block w-full truncate rounded px-2 py-1 text-left text-[#d1d2d3] hover:bg-white/10"
+                  onClick={() => {
+                    if (r.id === user.id) return;
+                    openDm(r.id);
+                    setSearchQ('');
+                    setPeopleSearchResults([]);
+                  }}
+                >
+                  {r.name} <span className="text-[#b39fb3]">{r.email}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <div className="flex-1 overflow-y-auto px-2 py-2">
           <div className="px-2 text-xs font-semibold uppercase tracking-wide text-[#b39fb3]">Channels</div>
           {channels.map((c) => (
@@ -689,110 +799,6 @@ export default function Workspace() {
             </button>
           ) : null}
           {typingName ? <span className="text-sm text-slate-500">{typingName} is typing…</span> : null}
-          <div className="flex flex-wrap items-center gap-1">
-            {(['messages', 'channels', 'people']).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                className={`rounded px-2 py-0.5 text-[10px] uppercase ${
-                  searchTab === tab ? 'bg-violet-600 text-white' : 'bg-slate-200 dark:bg-slate-700'
-                }`}
-                onClick={() => setSearchTab(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-          <input
-            type="search"
-            value={searchQ}
-            onChange={(e) => setSearchQ(e.target.value)}
-            placeholder={searchTab === 'messages' ? 'Search messages…' : searchTab === 'channels' ? 'Channels…' : 'People…'}
-            className="w-40 rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 sm:w-48"
-          />
-          {searchTab === 'messages' && searchResults.length > 0 && searchQ.trim().length >= 2 ? (
-            <div className="absolute right-4 top-14 z-40 max-h-64 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-lg dark:border-slate-600 dark:bg-slate-800">
-              {searchResults.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className="block w-full truncate rounded px-2 py-1 text-left hover:bg-slate-100 dark:hover:bg-slate-700"
-                  onClick={() => {
-                    (async () => {
-                      if (r.channelId) {
-                        setGroupConv(null);
-                        setDmPeer(null);
-                        setConversationId(null);
-                        setChannelId(r.channelId);
-                      } else if (r.conversationId && workspaceId) {
-                        setChannelId(null);
-                        const { conversations: convs } = await api(
-                          `/conversations/workspace/${workspaceId}/conversations`
-                        );
-                        setConversations(convs);
-                        const cv = convs.find((c) => c.id === r.conversationId);
-                        if (cv) {
-                          if (cv.kind === 'group') {
-                            setGroupConv({ title: cv.title, participants: cv.participants });
-                            setDmPeer(null);
-                          } else {
-                            setGroupConv(null);
-                            setDmPeer(cv.otherUser);
-                          }
-                        }
-                        setConversationId(r.conversationId);
-                      }
-                      setSearchQ('');
-                      setSearchResults([]);
-                    })().catch(console.error);
-                  }}
-                >
-                  {r.channelName ? `#${r.channelName}` : r.conversationLabel || 'DM'} — {r.content?.slice(0, 80)}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {searchTab === 'channels' && channelSearchResults.length > 0 && searchQ.trim().length >= 1 ? (
-            <div className="absolute right-4 top-14 z-40 max-h-64 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-lg dark:border-slate-600 dark:bg-slate-800">
-              {channelSearchResults.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className="block w-full truncate rounded px-2 py-1 text-left hover:bg-slate-100 dark:hover:bg-slate-700"
-                  onClick={() => {
-                    setGroupConv(null);
-                    setDmPeer(null);
-                    setConversationId(null);
-                    setChannelId(r.id);
-                    setSearchQ('');
-                    setChannelSearchResults([]);
-                  }}
-                >
-                  {r.type === 'private' ? '🔒 ' : '#'}
-                  {r.name}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {searchTab === 'people' && peopleSearchResults.length > 0 && searchQ.trim().length >= 1 ? (
-            <div className="absolute right-4 top-14 z-40 max-h-64 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-lg dark:border-slate-600 dark:bg-slate-800">
-              {peopleSearchResults.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className="block w-full truncate rounded px-2 py-1 text-left hover:bg-slate-100 dark:hover:bg-slate-700"
-                  onClick={() => {
-                    if (r.id === user.id) return;
-                    openDm(r.id);
-                    setSearchQ('');
-                    setPeopleSearchResults([]);
-                  }}
-                >
-                  {r.name} <span className="text-slate-400">{r.email}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
           {(channelId || conversationId) && workspaceId ? (
             <button
               type="button"
@@ -803,14 +809,6 @@ export default function Workspace() {
               Call
             </button>
           ) : null}
-          <button
-            type="button"
-            className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-            title="Settings"
-            onClick={() => navigate('/settings')}
-          >
-            ⚙️
-          </button>
           <div className="relative">
             <button
               type="button"
