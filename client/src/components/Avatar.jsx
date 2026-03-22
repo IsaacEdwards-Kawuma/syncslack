@@ -1,6 +1,8 @@
 import { getPublicAssetUrl } from '../lib/api.js';
 
 const sizeMap = {
+  6: 'h-6 w-6 text-[9px]',
+  7: 'h-7 w-7 text-[10px]',
   8: 'h-8 w-8 text-[10px]',
   9: 'h-9 w-9 text-xs',
   10: 'h-10 w-10 text-sm',

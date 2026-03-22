@@ -689,9 +689,14 @@ export default function Workspace() {
   const myRole = useMemo(() => members.find((m) => m.id === user?.id)?.role, [members, user?.id]);
   const canManage = myRole === 'owner' || myRole === 'admin';
 
+  const activeChannel = useMemo(
+    () => (channelId ? channels.find((c) => c.id === channelId) : null),
+    [channels, channelId]
+  );
+
   const headerTitle =
-    channelId && channels.find((c) => c.id === channelId)
-      ? `# ${channels.find((c) => c.id === channelId).name}`
+    channelId && activeChannel
+      ? `# ${activeChannel.name}`
       : conversationId && groupConv
         ? groupConv.title || groupConv.participants?.map((p) => p.name).join(', ')
         : conversationId && dmPeer
@@ -951,7 +956,7 @@ export default function Workspace() {
                 <button
                   key={r.id}
                   type="button"
-                  className="block w-full truncate rounded px-2 py-1 text-left text-[#d1d2d3] hover:bg-white/10"
+                  className="flex w-full items-center gap-2 truncate rounded px-2 py-1.5 text-left text-[#d1d2d3] hover:bg-white/10"
                   onClick={() => {
                     if (r.id === user.id) return;
                     openDm(r.id);
@@ -959,7 +964,10 @@ export default function Workspace() {
                     setPeopleSearchResults([]);
                   }}
                 >
-                  {r.name} <span className="text-[#b39fb3]">{r.email}</span>
+                  <Avatar user={r} size={7} />
+                  <span className="min-w-0 truncate">
+                    {r.name} <span className="text-[#b39fb3]">{r.email}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -1018,9 +1026,15 @@ export default function Workspace() {
               }`}
             >
               {cv.kind === 'group' ? (
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-white/20 text-xs font-bold">
-                  G
-                </span>
+                <GroupAvatarStack
+                  participants={cv.participants}
+                  size={7}
+                  ringClass={
+                    conversationId === cv.id
+                      ? 'ring-2 ring-[#1164a3]'
+                      : 'ring-2 ring-[#3f0e40] dark:ring-slate-950'
+                  }
+                />
               ) : (
                 <Avatar user={cv.otherUser} size={8} />
               )}
@@ -1085,7 +1099,35 @@ export default function Workspace() {
             ☰
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-bold leading-tight sm:text-lg">{headerTitle}</h1>
+            <div className="flex min-w-0 items-center gap-2.5">
+              {channelId && activeChannel ? (
+                <>
+                  <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/25 to-indigo-500/15 text-sm font-bold text-violet-700 shadow-sm dark:text-violet-300"
+                    aria-hidden
+                  >
+                    #
+                  </span>
+                  <h1 className="truncate text-base font-bold leading-tight sm:text-lg">{activeChannel.name}</h1>
+                </>
+              ) : conversationId && groupConv ? (
+                <>
+                  <GroupAvatarStack
+                    participants={groupConv.participants}
+                    size={8}
+                    ringClass="ring-2 ring-slate-200 dark:ring-slate-700"
+                  />
+                  <h1 className="min-w-0 truncate text-base font-bold leading-tight sm:text-lg">{headerTitle}</h1>
+                </>
+              ) : conversationId && dmPeer ? (
+                <>
+                  <Avatar user={dmPeer} size={9} />
+                  <h1 className="min-w-0 truncate text-base font-bold leading-tight sm:text-lg">{dmPeer.name}</h1>
+                </>
+              ) : (
+                <h1 className="truncate text-base font-bold leading-tight sm:text-lg">{headerTitle}</h1>
+              )}
+            </div>
             {workspaceId && members.length > 0 ? (
               <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400" title="People in this workspace">
                 {members.length} member{members.length !== 1 ? 's' : ''} in this workspace
@@ -1349,10 +1391,11 @@ export default function Workspace() {
                           <button
                             key={m.id}
                             type="button"
-                            className="block w-full truncate px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-700"
+                            className="flex w-full items-center gap-2 truncate px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-700"
                             onClick={() => insertMention(m.id)}
                           >
-                            {m.name}
+                            <Avatar user={m} size={7} />
+                            <span className="truncate">{m.name}</span>
                           </button>
                         ))
                       )}
@@ -1418,7 +1461,12 @@ export default function Workspace() {
               </div>
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2">
                 <div className="rounded-lg border border-slate-200 bg-white/80 p-2 text-xs dark:border-slate-600 dark:bg-slate-900/80">
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">{threadParent.sender?.name}</span>
+                  <div className="flex items-center gap-2">
+                    <Avatar user={threadParent.sender} size={7} />
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">
+                      {threadParent.sender?.name || 'Unknown'}
+                    </span>
+                  </div>
                   <div className="mt-1 line-clamp-4 text-slate-600 dark:text-slate-300">
                     {threadParent.deletedAt ? <span className="italic">(deleted)</span> : threadParent.content}
                   </div>
@@ -1484,8 +1532,11 @@ export default function Workspace() {
               <p className="text-slate-500 dark:text-slate-400">No saved messages yet. Use “Save” on a message.</p>
             ) : null}
             {savedList.map((m) => (
-              <div key={m.id} className="rounded border border-slate-200 p-2 text-xs dark:border-slate-600">
-                <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
+              <div key={m.id} className="rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-600">
+                <div className="flex items-center gap-2">
+                  <Avatar user={m.sender} size={7} />
+                  <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
+                </div>
                 <div className="mt-1 whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300">{m.content}</div>
               </div>
             ))}
@@ -1640,8 +1691,11 @@ export default function Workspace() {
               <div className="font-semibold">Members</div>
               {members.map((m) => (
                 <div key={m.id} className="flex items-center justify-between gap-2 py-1">
-                  <span>
-                    {m.name} <span className="text-slate-500">({m.role})</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Avatar user={m} size={7} />
+                    <span className="truncate">
+                      {m.name} <span className="text-slate-500">({m.role})</span>
+                    </span>
                   </span>
                   {canManage && m.id !== user.id && m.role !== 'owner' ? (
                     <button
@@ -1949,7 +2003,7 @@ function MessageBlock({ message, members = [], selfId, onReaction, onThread, com
             ) : (
               <ReactMarkdown
                 components={{
-                  a: MentionLink,
+                  a: (props) => <MentionLink {...props} members={members} />,
                 }}
               >
                 {mentionsToMarkdownLinks(message.content, members)}
