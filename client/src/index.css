@@ -11,10 +11,62 @@ body,
   overflow-x: hidden;
 }
 
-body {
-  @apply bg-slate-50 text-slate-900;
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply antialiased;
+    @apply bg-slate-50 text-slate-900;
+  }
+
+  html.dark body {
+    @apply bg-slate-900 text-slate-100;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
 }
 
-body.dark {
-  @apply bg-slate-900 text-slate-100;
+@layer components {
+  .auth-page {
+    @apply relative flex min-h-full flex-col items-center justify-center overflow-hidden px-4 py-10;
+    @apply bg-gradient-to-br from-violet-950 via-purple-950 to-slate-950;
+  }
+
+  .auth-page::before {
+    content: '';
+    @apply pointer-events-none absolute inset-0;
+    background:
+      radial-gradient(ellipse 90% 60% at 50% -15%, rgba(167, 139, 250, 0.35), transparent 55%),
+      radial-gradient(ellipse 50% 45% at 100% 100%, rgba(99, 102, 241, 0.22), transparent 50%),
+      radial-gradient(ellipse 40% 35% at 0% 80%, rgba(192, 132, 252, 0.12), transparent 45%);
+  }
+
+  .auth-card {
+    @apply relative w-full max-w-md rounded-2xl border border-white/15 bg-white/95 p-8 shadow-soft-lg backdrop-blur-md;
+    @apply dark:border-slate-600/40 dark:bg-slate-900/90;
+    @apply motion-safe:animate-fade-in-up;
+  }
+
+  .input-field {
+    @apply mt-1 w-full rounded-xl border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 outline-none transition;
+    @apply focus:border-violet-400 focus:ring-2 focus:ring-violet-500/25;
+    @apply dark:border-slate-600 dark:bg-slate-950 dark:text-white;
+  }
+
+  .btn-primary {
+    @apply w-full rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2.5 font-semibold text-white shadow-md;
+    @apply transition duration-200 hover:from-violet-500 hover:to-indigo-500 hover:shadow-lg;
+    @apply active:scale-[0.99] disabled:opacity-60 disabled:active:scale-100;
+  }
+
+  .surface-card {
+    @apply rounded-2xl border border-slate-200/80 bg-white/90 shadow-soft backdrop-blur-sm;
+    @apply dark:border-slate-700/80 dark:bg-slate-800/90;
+  }
 }

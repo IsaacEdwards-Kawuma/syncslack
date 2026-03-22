@@ -25,20 +25,21 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-gradient-to-br from-violet-900 via-purple-900 to-slate-900 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white/95 p-8 shadow-xl dark:bg-slate-800/95">
-        <h1 className="text-center text-2xl font-bold text-slate-800 dark:text-white">Sync Work</h1>
-        <p className="mt-1 text-center text-sm text-slate-500 dark:text-slate-400">
-          Sign in to your workspace
-        </p>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="text-center">
+          <p className="text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">Sync Work</p>
+          <h1 className="mt-1 text-2xl font-bold text-slate-800 dark:text-white">Welcome back</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Sign in to your workspace</p>
+        </div>
         <form onSubmit={onSubmit} className="mt-8 space-y-4">
           {error ? (
-            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
               {error}
             </div>
           ) : null}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Email
             </label>
             <input
@@ -46,11 +47,11 @@ export default function Login() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none ring-violet-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+              className="input-field"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Password
             </label>
             <input
@@ -58,34 +59,30 @@ export default function Login() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none ring-violet-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+              className="input-field"
             />
           </div>
-          <button
-            type="submit"
-            disabled={pending}
-            className="w-full rounded-lg bg-violet-700 py-2.5 font-semibold text-white transition hover:bg-violet-600 disabled:opacity-60"
-          >
+          <button type="submit" disabled={pending} className="btn-primary">
             {pending ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
         <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
-          <Link to="/forgot-password" className="text-violet-600 hover:underline">
+          <Link to="/forgot-password" className="font-medium text-violet-600 transition hover:text-violet-500 dark:text-violet-400">
             Forgot password?
           </Link>
         </p>
         <p className="mt-4 text-center text-sm text-slate-600 dark:text-slate-400">
           No account?{' '}
-          <Link to="/register" className="font-semibold text-violet-600 hover:underline">
+          <Link to="/register" className="font-semibold text-violet-600 transition hover:text-violet-500 dark:text-violet-400">
             Create one
           </Link>
         </p>
-        <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-500">
-          <Link to="/help" className="hover:underline">
+        <p className="mt-8 text-center text-xs text-slate-500 dark:text-slate-500">
+          <Link to="/help" className="transition hover:text-violet-600 dark:hover:text-violet-400">
             Help
           </Link>
           {' · '}
-          <Link to="/privacy" className="hover:underline">
+          <Link to="/privacy" className="transition hover:text-violet-600 dark:hover:text-violet-400">
             Privacy
           </Link>
         </p>

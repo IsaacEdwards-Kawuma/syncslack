@@ -51,11 +51,11 @@ function withinMinutes(a, b, mins) {
 
 function DayDivider({ label }) {
   return (
-    <div className="relative my-5 flex items-center justify-center">
+    <div className="relative my-6 flex items-center justify-center">
       <div className="absolute inset-0 flex items-center px-4">
-        <div className="h-px w-full bg-slate-200 dark:bg-slate-600" />
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-slate-600" />
       </div>
-      <span className="relative rounded-full bg-white px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-sm dark:bg-slate-900 dark:text-slate-400">
+      <span className="relative rounded-full border border-slate-200/80 bg-white/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500 shadow-sm backdrop-blur-sm dark:border-slate-600/80 dark:bg-slate-900/95 dark:text-slate-400">
         {label}
       </span>
     </div>
@@ -702,25 +702,38 @@ export default function Workspace() {
 
   if (!workspaces.length) {
     return (
-        <div className="flex min-h-full flex-col items-center justify-center gap-4 bg-slate-50 p-6 dark:bg-slate-900 sm:p-8">
-        <p className="text-center text-lg text-slate-600 dark:text-slate-300">Create or join a workspace to get started.</p>
-        <div className="flex w-full max-w-sm flex-col gap-2 sm:w-auto sm:flex-row">
+        <div className="relative flex min-h-full flex-col items-center justify-center gap-6 overflow-hidden bg-gradient-to-b from-slate-50 via-violet-50/30 to-slate-100 p-6 dark:from-slate-950 dark:via-violet-950/20 dark:to-slate-900 sm:p-8">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-40 dark:opacity-20"
+          aria-hidden
+          style={{
+            background:
+              'radial-gradient(ellipse 70% 50% at 50% -10%, rgba(139, 92, 246, 0.2), transparent), radial-gradient(ellipse 50% 40% at 100% 100%, rgba(99, 102, 241, 0.12), transparent)',
+          }}
+        />
+        <div className="relative text-center motion-safe:animate-fade-in-up">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/25 to-indigo-600/10 text-3xl shadow-glow">
+            ✨
+          </div>
+          <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Create or join a workspace to get started.</p>
+        </div>
+        <div className="relative flex w-full max-w-sm flex-col gap-3 sm:w-auto sm:flex-row sm:justify-center">
           <button
             type="button"
-            className="rounded-lg bg-violet-700 px-4 py-2 font-semibold text-white"
+            className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2.5 font-semibold text-white shadow-md transition hover:from-violet-500 hover:to-indigo-500 hover:shadow-lg active:scale-[0.99]"
             onClick={() => setShowCreateWs(true)}
           >
             Create workspace
           </button>
           <button
             type="button"
-            className="rounded-lg border border-slate-300 px-4 py-2 font-semibold dark:border-slate-600"
+            className="rounded-xl border border-slate-300/80 bg-white/80 px-5 py-2.5 font-semibold shadow-sm backdrop-blur-sm transition hover:border-violet-300 hover:bg-white dark:border-slate-600 dark:bg-slate-800/80 dark:hover:border-violet-700"
             onClick={() => setShowJoinWs(true)}
           >
             Join workspace
           </button>
         </div>
-        <button type="button" className="text-sm text-slate-500 underline" onClick={logout}>
+        <button type="button" className="relative text-sm font-medium text-slate-500 transition hover:text-violet-600 dark:text-slate-400 dark:hover:text-violet-400" onClick={logout}>
           Sign out
         </button>
         {showCreateWs ? (
@@ -760,10 +773,10 @@ export default function Workspace() {
   }
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+    <div className="flex h-full min-h-0 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-slate-100">
       {mobileSidebarOpen ? (
         <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm transition-opacity md:hidden"
           aria-hidden
           onClick={() => setMobileSidebarOpen(false)}
         />
@@ -772,15 +785,15 @@ export default function Workspace() {
         className={`fixed inset-y-0 left-0 z-50 flex h-full shrink-0 md:static md:z-auto md:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-200 ease-out md:translate-x-0`}
       >
       {/* Workspace rail */}
-      <aside className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-[#522653] bg-[#3f0e40] py-3 dark:border-slate-700">
+      <aside className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-[#522653] bg-[#3f0e40] py-3 shadow-[4px_0_24px_-8px_rgba(0,0,0,0.25)] dark:border-slate-700">
         {workspaces.map((w) => (
           <button
             key={w.id}
             type="button"
             title={w.name}
             onClick={() => setWorkspaceId(w.id)}
-            className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold text-white transition ${
-              workspaceId === w.id ? 'bg-white/20 ring-2 ring-white/40' : 'bg-white/10 hover:bg-white/20'
+            className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold text-white transition duration-200 active:scale-95 ${
+              workspaceId === w.id ? 'bg-white/20 shadow-md ring-2 ring-white/40' : 'bg-white/10 hover:bg-white/20'
             }`}
           >
             {w.name.slice(0, 2).toUpperCase()}
@@ -813,7 +826,7 @@ export default function Workspace() {
       </aside>
 
       {/* Channels + DMs */}
-      <aside className="flex w-[min(16rem,calc(100vw-4rem))] shrink-0 flex-col border-r border-[#522653] bg-[#3f0e40] text-[#d1d2d3] dark:border-slate-700 dark:bg-slate-950 md:w-64">
+      <aside className="flex w-[min(16rem,calc(100vw-4rem))] shrink-0 flex-col border-r border-[#522653] bg-[#3f0e40] text-[#d1d2d3] shadow-[4px_0_24px_-8px_rgba(0,0,0,0.2)] dark:border-slate-700 dark:bg-slate-950 md:w-64">
         <div className="border-b border-[#522653] px-3 py-3 dark:border-slate-700">
           <div className="flex items-center justify-between gap-2">
             <div className="truncate font-bold text-white">{activeWorkspace?.name || 'Workspace'}</div>
@@ -1061,11 +1074,11 @@ export default function Workspace() {
       </div>
 
       {/* Main chat */}
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-white dark:bg-slate-900">
-        <header className="relative flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2 sm:px-4 dark:border-slate-700">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-white/90 backdrop-blur-[2px] dark:bg-slate-900/90">
+        <header className="sticky top-0 z-10 flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-2 shadow-soft backdrop-blur-md sm:px-4 dark:border-slate-700/80 dark:bg-slate-900/85">
           <button
             type="button"
-            className="-ml-0.5 shrink-0 rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 md:hidden"
+            className="-ml-0.5 shrink-0 rounded-lg p-2 text-slate-600 transition hover:bg-slate-100 active:scale-95 dark:text-slate-300 dark:hover:bg-slate-800 md:hidden"
             onClick={() => setMobileSidebarOpen(true)}
             aria-label="Open channels menu"
           >
@@ -1130,22 +1143,22 @@ export default function Workspace() {
             Saved
           </button>
           {(channelId || conversationId) && workspaceId ? (
-            <div className="flex flex-wrap items-center gap-0.5">
+            <div className="flex flex-wrap items-center gap-1">
               <button
                 type="button"
-                className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-violet-100 hover:text-violet-900 active:scale-95 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-violet-950/80 dark:hover:text-violet-200"
                 title="Video call — posts a join link in this chat"
                 onClick={() => openCall('video')}
               >
-                Video
+                📹 Video
               </button>
               <button
                 type="button"
-                className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-violet-100 hover:text-violet-900 active:scale-95 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-violet-950/80 dark:hover:text-violet-200"
                 title="Voice call (mic only, camera off) — posts a join link in this chat"
                 onClick={() => openCall('audio')}
               >
-                Voice
+                🎤 Voice
               </button>
             </div>
           ) : null}
@@ -1161,7 +1174,7 @@ export default function Workspace() {
               🔔 {notifications.filter((n) => !n.readAt).length || ''}
             </button>
             {showNotif ? (
-              <div className="absolute right-0 top-10 z-50 max-h-[min(18rem,70vh)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-xl dark:border-slate-600 dark:bg-slate-800 sm:w-80">
+              <div className="absolute right-0 top-10 z-50 max-h-[min(18rem,70vh)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-slate-200/90 bg-white/95 p-2 text-xs shadow-soft-lg backdrop-blur-md motion-safe:animate-modal-in dark:border-slate-600 dark:bg-slate-800/95 sm:w-80">
                 <button
                   type="button"
                   className="mb-2 text-violet-600 hover:underline"
@@ -1218,9 +1231,18 @@ export default function Workspace() {
           ) : null}
           <div className="flex items-center gap-2 text-xs text-slate-500">
             {connected ? (
-              <span className="text-emerald-600">● Live</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-400">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                Live
+              </span>
             ) : (
-              <span className="text-amber-600">Reconnecting…</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
+                Reconnecting…
+              </span>
             )}
           </div>
         </header>
@@ -1232,14 +1254,24 @@ export default function Workspace() {
               className="flex-1 space-y-0 overflow-y-auto px-4 py-3 sm:px-6"
             >
               {!channelId && !conversationId ? (
-                <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 text-center text-slate-500 dark:text-slate-400">
-                  <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">Welcome to Sync Work</p>
-                  <p className="max-w-sm text-sm">Pick a channel or direct message in the sidebar to start chatting.</p>
+                <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-4 px-4 text-center text-slate-500 motion-safe:animate-fade-in-up dark:text-slate-400">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500/15 to-indigo-600/10 text-4xl shadow-inner">
+                    👋
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">Welcome to Sync Work</p>
+                    <p className="mt-1 max-w-sm text-sm leading-relaxed">Pick a channel or direct message in the sidebar to start chatting.</p>
+                  </div>
                 </div>
               ) : messages.length === 0 ? (
-                <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 text-center text-slate-500 dark:text-slate-400">
-                  <p className="text-base font-medium text-slate-700 dark:text-slate-200">No messages yet</p>
-                  <p className="max-w-sm text-sm">Say hello below — supports Markdown, uploads, and @mentions.</p>
+                <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-4 px-4 text-center text-slate-500 motion-safe:animate-fade-in-up dark:text-slate-400">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/12 to-slate-400/10 text-3xl">
+                    💬
+                  </div>
+                  <div>
+                    <p className="text-base font-semibold text-slate-800 dark:text-slate-200">No messages yet</p>
+                    <p className="mt-1 max-w-sm text-sm leading-relaxed">Say hello below — Markdown, uploads, and @mentions.</p>
+                  </div>
                 </div>
               ) : (
                 messages.map((m, i) => {
@@ -1277,7 +1309,7 @@ export default function Workspace() {
             {showJumpLatest && (channelId || conversationId) && messages.length > 0 ? (
               <button
                 type="button"
-                className="absolute bottom-24 right-4 z-10 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-md hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-violet-300 dark:hover:bg-slate-700"
+                className="absolute bottom-24 right-4 z-10 rounded-full border border-violet-200/80 bg-white/95 px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-soft-lg backdrop-blur-sm transition hover:scale-[1.02] hover:border-violet-300 hover:shadow-md dark:border-violet-800/50 dark:bg-slate-800/95 dark:text-violet-300 dark:hover:bg-slate-700"
                 onClick={() => {
                   stickToBottomRef.current = true;
                   messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1288,12 +1320,12 @@ export default function Workspace() {
               </button>
             ) : null}
 
-            <div className="border-t border-slate-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-700 sm:p-4">
+            <div className="border-t border-slate-200/90 bg-gradient-to-t from-slate-50/90 to-white/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-700/90 dark:from-slate-950/90 dark:to-slate-900/80 sm:p-4">
               <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
               <div className="flex items-end gap-1.5 sm:gap-2">
                 <button
                   type="button"
-                  className="shrink-0 rounded border border-slate-200 px-2 py-2 text-sm dark:border-slate-600"
+                  className="shrink-0 rounded-xl border border-slate-200/90 bg-white px-2.5 py-2 text-sm shadow-sm transition hover:border-violet-200 hover:bg-violet-50/50 active:scale-95 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-violet-800 dark:hover:bg-violet-950/30"
                   onClick={() => fileRef.current?.click()}
                 >
                   📎
@@ -1301,7 +1333,7 @@ export default function Workspace() {
                 <div className="relative flex min-w-0 flex-1 gap-1">
                   <button
                     type="button"
-                    className="shrink-0 rounded border border-slate-200 px-2 py-2 text-sm dark:border-slate-600"
+                    className="shrink-0 rounded-xl border border-slate-200/90 bg-white px-2.5 py-2 text-sm shadow-sm transition hover:border-violet-200 hover:bg-violet-50/50 active:scale-95 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-violet-800 dark:hover:bg-violet-950/30"
                     title="Mention someone"
                     disabled={!channelId && !conversationId}
                     onClick={() => setShowMention((v) => !v)}
@@ -1346,14 +1378,14 @@ export default function Workspace() {
                         : 'Select a channel'
                     }
                     disabled={!channelId && !conversationId}
-                    className="min-h-[44px] max-h-36 min-w-0 flex-1 resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                    className="min-h-[44px] max-h-36 min-w-0 flex-1 resize-y rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2.5 text-sm shadow-inner outline-none ring-violet-500/0 transition focus:border-violet-300 focus:ring-2 focus:ring-violet-500/25 dark:border-slate-600 dark:bg-slate-800/90 dark:text-white dark:focus:border-violet-700"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => sendMessage()}
                   disabled={!channelId && !conversationId}
-                  className="shrink-0 self-end rounded-lg bg-violet-700 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-600 disabled:opacity-50 sm:px-4"
+                  className="shrink-0 self-end rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-md transition hover:from-violet-500 hover:to-indigo-500 hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 sm:px-4"
                 >
                   Send
                 </button>
@@ -1369,8 +1401,8 @@ export default function Workspace() {
           </div>
 
           {threadParent && (channelId || conversationId) ? (
-            <aside className="fixed inset-0 z-[60] flex min-h-0 flex-col bg-slate-50 dark:bg-slate-950 lg:static lg:inset-auto lg:z-auto lg:h-full lg:w-[min(100%,20rem)] lg:max-w-[20rem] lg:shrink-0 lg:border-l lg:border-slate-200 dark:lg:border-slate-700">
-              <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2.5 dark:border-slate-700">
+            <aside className="fixed inset-0 z-[60] flex min-h-0 flex-col bg-slate-50/98 backdrop-blur-sm dark:bg-slate-950/98 lg:static lg:inset-auto lg:z-auto lg:h-full lg:w-[min(100%,20rem)] lg:max-w-[20rem] lg:shrink-0 lg:border-l lg:border-slate-200/90 lg:bg-gradient-to-b lg:from-slate-50/95 lg:to-white/90 lg:shadow-[inset_6px_0_20px_-12px_rgba(15,23,42,0.08)] dark:lg:border-slate-700 dark:lg:from-slate-950 dark:lg:to-slate-900">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-200/90 bg-white/60 px-3 py-2.5 backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/60">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold">Thread</div>
                   <div className="truncate text-xs text-slate-500 dark:text-slate-400">Reply in this side panel</div>
@@ -1777,13 +1809,25 @@ export default function Workspace() {
 
 function Modal({ title, children, onClose, wide }) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-900/55 p-3 backdrop-blur-sm motion-safe:animate-fade-in sm:p-4"
+      role="presentation"
+    >
       <div
-        className={`w-full ${wide ? 'max-w-4xl' : 'max-w-md'} rounded-xl bg-white p-4 shadow-xl sm:p-6 dark:bg-slate-800`}
+        role="dialog"
+        aria-modal="true"
+        className={`w-full ${wide ? 'max-w-4xl' : 'max-w-md'} rounded-2xl border border-slate-200/80 bg-white/95 p-4 shadow-soft-lg backdrop-blur-md motion-safe:animate-modal-in sm:p-6 dark:border-slate-600/60 dark:bg-slate-800/95`}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold">{title}</h2>
-          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-800">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-lg font-bold text-transparent dark:from-white dark:to-slate-300">
+            {title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-white"
+            aria-label="Close"
+          >
             ✕
           </button>
         </div>
@@ -1863,7 +1907,7 @@ function MessageBlock({ message, members = [], selfId, onReaction, onThread, com
 
   return (
     <div
-      className={`group flex gap-3 rounded-lg px-2 ${groupWithPrev && !compact ? '-mt-0.5 py-0' : 'py-1'} hover:bg-slate-50 dark:hover:bg-slate-800/80 ${compact ? 'text-sm' : ''}`}
+      className={`group flex gap-3 rounded-xl px-2 transition-colors duration-150 ${groupWithPrev && !compact ? '-mt-0.5 py-0' : 'py-1'} hover:bg-slate-50/90 dark:hover:bg-slate-800/80 ${compact ? 'text-sm' : ''}`}
     >
       {showHeader ? (
         <Avatar user={message.sender} size={compact ? 8 : 9} />

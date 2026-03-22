@@ -23,17 +23,17 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-gradient-to-br from-violet-900 via-purple-900 to-slate-900 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white/95 p-8 shadow-xl dark:bg-slate-800/95">
+    <div className="auth-page">
+      <div className="auth-card">
         <h1 className="text-center text-2xl font-bold text-slate-800 dark:text-white">Reset password</h1>
         {done ? (
-          <p className="mt-4 text-center text-sm text-slate-600 dark:text-slate-300">
+          <p className="mt-4 text-center text-sm leading-relaxed text-slate-600 dark:text-slate-300">
             If an account exists for that email, we sent a reset link (check server logs if SMTP is not configured).
           </p>
         ) : (
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             {error ? (
-              <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
                 {error}
               </div>
             ) : null}
@@ -43,19 +43,15 @@ export default function ForgotPassword() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Email"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+              className="input-field mt-0"
             />
-            <button
-              type="submit"
-              disabled={pending}
-              className="w-full rounded-lg bg-violet-700 py-2.5 font-semibold text-white disabled:opacity-60"
-            >
+            <button type="submit" disabled={pending} className="btn-primary">
               {pending ? 'Sending…' : 'Send reset link'}
             </button>
           </form>
         )}
         <p className="mt-6 text-center text-sm">
-          <Link to="/login" className="text-violet-600 hover:underline">
+          <Link to="/login" className="font-medium text-violet-600 transition hover:text-violet-500 dark:text-violet-400">
             Back to sign in
           </Link>
         </p>

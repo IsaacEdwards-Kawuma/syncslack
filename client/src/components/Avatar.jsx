@@ -19,13 +19,13 @@ export default function Avatar({ user, size = 9 }) {
       <img
         src={getPublicAssetUrl(user.avatarUrl)}
         alt=""
-        className={`inline-block shrink-0 rounded object-cover ${dim.split(' ').slice(0, 2).join(' ')}`}
+        className={`inline-block shrink-0 rounded object-cover ring-2 ring-white/40 dark:ring-slate-700/80 ${dim.split(' ').slice(0, 2).join(' ')}`}
       />
     );
   }
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded bg-violet-600 font-semibold text-white ${dim}`}
+      className={`flex shrink-0 items-center justify-center rounded bg-gradient-to-br from-violet-500 to-indigo-600 font-semibold text-white shadow-sm ring-2 ring-white/30 dark:ring-slate-700/60 ${dim}`}
     >
       {initials}
     </div>

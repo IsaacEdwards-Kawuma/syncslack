@@ -26,11 +26,13 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-8">
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Profile</h1>
+    <div className="mx-auto max-w-lg px-4 py-8 motion-safe:animate-fade-in-up">
+      <h1 className="bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-2xl font-bold text-transparent dark:from-white dark:to-slate-300">
+        Profile
+      </h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Your account</p>
 
-      <div className="mt-8 flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="surface-card mt-8 flex items-start gap-4 p-6 transition hover:shadow-soft-lg">
         <Avatar user={user} size={10} />
         <div className="min-w-0 flex-1">
           <div className="text-lg font-semibold text-slate-900 dark:text-white">{user?.name}</div>
@@ -47,7 +49,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <form onSubmit={saveStatus} className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <form onSubmit={saveStatus} className="surface-card mt-6 p-6 transition hover:shadow-soft-lg">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Status</h2>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Shown to people in your workspaces.</p>
         <div className="mt-3 flex flex-wrap gap-2">

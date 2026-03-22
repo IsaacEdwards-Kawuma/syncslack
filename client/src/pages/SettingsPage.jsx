@@ -53,8 +53,10 @@ export default function SettingsPage() {
   const apiLabel = apiBase ? apiBase : 'Same origin (Vite dev proxy to API)';
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Settings</h1>
+    <div className="mx-auto max-w-xl px-4 py-8 motion-safe:animate-fade-in-up">
+      <h1 className="bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-2xl font-bold text-transparent dark:from-white dark:to-slate-300">
+        Settings
+      </h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         Account, appearance, notifications, and workspaces
       </p>
@@ -71,7 +73,7 @@ export default function SettingsPage() {
       ) : null}
 
       {/* Account */}
-      <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <section className="surface-card mt-8 p-6 transition hover:shadow-soft-lg">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Account</h2>
         <div className="mt-4 flex items-start gap-4">
           <Avatar user={user} size={10} />
@@ -100,7 +102,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Appearance */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <section className="surface-card mt-6 p-6 transition hover:shadow-soft-lg">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Appearance</h2>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Synced to your account.</p>
         <button
@@ -113,7 +115,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Privacy & help */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <section className="surface-card mt-6 p-6 transition hover:shadow-soft-lg">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Privacy & help</h2>
         <ul className="mt-3 space-y-2 text-sm">
           <li>
@@ -132,7 +134,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Notification preferences (client) */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <section className="surface-card mt-6 p-6 transition hover:shadow-soft-lg">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Notifications</h2>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           In-app toast when you get a mention or DM while online.
@@ -155,7 +157,7 @@ export default function SettingsPage() {
 
       {/* Password */}
       <form
-        className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800"
+        className="surface-card mt-6 space-y-4 p-6 transition hover:shadow-soft-lg"
         onSubmit={async (e) => {
           e.preventDefault();
           setErr('');
@@ -197,7 +199,7 @@ export default function SettingsPage() {
 
       {/* Browser push */}
       {pushSupported() ? (
-        <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <section className="surface-card mt-6 p-6 transition hover:shadow-soft-lg">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Browser push</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Get alerts when this tab is in the background. Requires VAPID keys on the server (see server{' '}
@@ -229,7 +231,7 @@ export default function SettingsPage() {
       )}
 
       {/* Workspaces */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <section className="surface-card mt-6 p-6 transition hover:shadow-soft-lg">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Workspaces</h2>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           Leave a workspace you no longer need. Owners must transfer ownership in the app (Admin) before leaving.
@@ -278,7 +280,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Session */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <section className="surface-card mt-6 p-6 transition hover:shadow-soft-lg">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Session</h2>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Sign out on this browser. You will need to sign in again.</p>
         <button

@@ -26,24 +26,37 @@ export default function VerifyEmail() {
   }, [token]);
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-gradient-to-br from-violet-900 via-purple-900 to-slate-900 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white/95 p-8 text-center shadow-xl dark:bg-slate-800/95">
-        {status === 'pending' ? <p className="text-slate-600">Verifying…</p> : null}
+    <div className="auth-page">
+      <div className="auth-card text-center">
+        {status === 'pending' ? (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-violet-500/30 border-t-violet-600 dark:border-violet-400/25 dark:border-t-violet-400" />
+            <p className="text-slate-600 dark:text-slate-300">Verifying…</p>
+          </div>
+        ) : null}
         {status === 'ok' ? (
           <>
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400/20 to-teal-500/10 text-4xl motion-safe:animate-float">
+              ✓
+            </div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-white">Email verified</h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">You can close this tab or sign in.</p>
           </>
         ) : null}
         {status === 'error' ? (
           <>
-            <h1 className="text-xl font-bold text-red-700">Could not verify</h1>
-            <p className="mt-2 text-sm text-slate-600">{error}</p>
+            <h1 className="text-xl font-bold text-red-700 dark:text-red-400">Could not verify</h1>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{error}</p>
           </>
         ) : null}
-        <Link to="/login" className="mt-6 inline-block text-violet-600 hover:underline">
-          Sign in
-        </Link>
+        {status !== 'pending' ? (
+          <Link
+            to="/login"
+            className="mt-8 inline-block rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition hover:from-violet-500 hover:to-indigo-500"
+          >
+            Sign in
+          </Link>
+        ) : null}
       </div>
     </div>
   );
