@@ -1,10 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-/** Load .env from server/ regardless of process cwd (fixes missing JWT_SECRET when not run from server/). */
-dotenv.config({ path: path.join(__dirname, '../.env') });
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -22,6 +18,10 @@ import channelRoutes from './routes/channelRoutes.js';
 import conversationRoutes from './routes/conversationRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** Load .env from server/ regardless of process cwd. */
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 /** Required behind Render / other reverse proxies (rate-limit, secure cookies, req.ip). */
@@ -88,28 +88,26 @@ app.set('io', io);
 
 const PORT = Number(process.env.PORT) || 5000;
 
-function resolveMongoUri() {
-  const fromEnv = process.env.MONGODB_URI?.trim();
-  if (fromEnv) return fromEnv;
-  /** Render sets RENDER=true; there is no local MongoDB on the host. */
-  const mustHaveAtlas = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
-  if (mustHaveAtlas) {
-    console.error(
-      '[FATAL] MONGODB_URI is not set. In Render → Environment, add your MongoDB Atlas connection string (mongodb+srv://...).'
-    );
+function resolveDatabaseUrl() {
+  const u = process.env.DATABASE_URL?.trim();
+  if (u) return u;
+  if (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') {
+    console.error('[FATAL] DATABASE_URL is not set. Add your Neon connection string in Render → Environment.');
     return null;
   }
-  return 'mongodb://127.0.0.1:27017/syncwork';
+  console.error(
+    '[FATAL] DATABASE_URL is not set. Use Neon (postgresql://...) or local Postgres in server/.env.'
+  );
+  return null;
 }
 
 async function main() {
   console.log('[startup] sync-work-server');
   console.log('[startup] NODE_ENV=', process.env.NODE_ENV, 'RENDER=', process.env.RENDER);
-  console.log('[startup] MONGODB_URI is set:', Boolean(process.env.MONGODB_URI?.trim()));
+  console.log('[startup] DATABASE_URL is set:', Boolean(process.env.DATABASE_URL?.trim()));
   console.log('[startup] JWT_SECRET is set:', Boolean(process.env.JWT_SECRET?.trim()));
 
-  const mongoUri = resolveMongoUri();
-  if (!mongoUri) {
+  if (!resolveDatabaseUrl()) {
     process.exit(1);
   }
 
@@ -122,24 +120,10 @@ async function main() {
   }
 
   try {
-    await connectDB(mongoUri);
+    await connectDB();
   } catch (err) {
-    const msg = [err?.message, err?.cause?.message].filter(Boolean).join(' ') || String(err);
-    const code = err?.code ?? err?.cause?.code;
-    console.error('[FATAL] MongoDB connection failed:', msg);
-    if (/bad auth|authentication failed/i.test(msg) || code === 18) {
-      console.error(
-        'Auth failed: the DB user/password in Render → MONGODB_URI does not match Atlas → Database Access. Reset the user password in Atlas, paste the new connection string into Render (URL-encode special characters in the password).'
-      );
-    } else if (/whitelist|IP address|timed out|ReplicaSetNoPrimary|ECONNREFUSED/i.test(msg)) {
-      console.error(
-        'Network: Atlas → Network Access → add 0.0.0.0/0 (or confirm MONGODB_URI host matches this cluster).'
-      );
-    } else {
-      console.error(
-        'Check MONGODB_URI, Atlas user/password, and Network Access (allow 0.0.0.0/0 for testing).'
-      );
-    }
+    console.error('[FATAL] PostgreSQL connection failed:', err?.message || err);
+    console.error('Set DATABASE_URL to your Neon connection string (postgresql://user:pass@...neon.tech/neondb?sslmode=require).');
     process.exit(1);
   }
 

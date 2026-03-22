@@ -1,6 +1,6 @@
 # Sync Work — Slack-like team chat
 
-Production-oriented monorepo: **React + Tailwind** (`client`), **Express + MongoDB + Socket.IO** (`server`), **JWT + bcrypt** auth, workspaces, channels, DMs, threads, reactions, uploads, and dark mode.
+Production-oriented monorepo: **React + Tailwind** (`client`), **Express + PostgreSQL (Neon) + Socket.IO** (`server`), **JWT + bcrypt** auth, workspaces, channels, DMs, threads, reactions, uploads, and dark mode.
 
 ## Project layout
 
@@ -13,10 +13,10 @@ Production-oriented monorepo: **React + Tailwind** (`client`), **Express + Mongo
 │   └── package.json
 ├── server/
 │   ├── src/
-│   │   ├── config/         # Mongo connection
+│   │   ├── config/         # DB pool, CORS, env
+│   │   ├── db/             # SQL schema + repositories
 │   │   ├── controllers/
 │   │   ├── middleware/
-│   │   ├── models/         # User, Workspace, Channel, Message, Conversation
 │   │   ├── routes/
 │   │   ├── socket/         # Socket.IO rooms + events
 │   │   └── server.js
@@ -29,7 +29,7 @@ Production-oriented monorepo: **React + Tailwind** (`client`), **Express + Mongo
 ## Prerequisites
 
 - **Node.js 18+**
-- **MongoDB** running locally (e.g. `mongodb://127.0.0.1:27017`) or a cloud URI
+- **PostgreSQL** — use a [Neon](https://neon.tech) database (recommended) or local Postgres; connection string in `DATABASE_URL`
 
 ## Backend setup
 
@@ -41,7 +41,7 @@ Production-oriented monorepo: **React + Tailwind** (`client`), **Express + Mongo
 
    On macOS/Linux: `cp server/.env.example server/.env`
 
-2. Edit `server/.env` — set `MONGODB_URI`, `JWT_SECRET` (long random string in production), and optionally `PORT`, `CLIENT_ORIGIN`.
+2. Edit `server/.env` — set `DATABASE_URL` (Neon `postgresql://...`), `JWT_SECRET` (long random string in production), and optionally `PORT`, `CLIENT_ORIGIN`.
 
 3. Install and run:
 
@@ -83,9 +83,9 @@ Open **http://localhost:5173**. The Vite dev server proxies `/api`, `/uploads`, 
 
 - Set strong `JWT_SECRET`, restrict `CLIENT_ORIGIN` / CORS, use TLS and a process manager (PM2, systemd, etc.).
 - Serve the Vite `client/dist` via Express or a reverse proxy; point `CLIENT_ORIGIN` at your public URL.
-- Back up MongoDB; consider Redis adapter for Socket.IO if you scale horizontally.
+- Back up Postgres (Neon branches / snapshots); consider Redis adapter for Socket.IO if you scale horizontally.
 
-## Deploy online (GitHub + Atlas + Render + Vercel)
+## Deploy online (GitHub + Neon + Render + Vercel)
 
 Step-by-step guide: **[DEPLOY.md](./DEPLOY.md)** — env vars `VITE_API_URL` (Vercel) and comma-separated `CLIENT_ORIGIN` (Render) are required for the split frontend/backend setup.
 

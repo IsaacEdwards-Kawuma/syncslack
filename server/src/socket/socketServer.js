@@ -1,14 +1,12 @@
 import { Server } from 'socket.io';
-import mongoose from 'mongoose';
 import { getCorsOrigins } from '../config/cors.js';
 import { getJwtSecret } from '../config/env.js';
 import { verifyToken } from '../utils/jwt.js';
-import { Message } from '../models/Message.js';
-import { Conversation } from '../models/Conversation.js';
+import * as messages from '../db/messages.js';
+import * as conversations from '../db/conversations.js';
 import { assertChannelAccess, assertConversationAccess } from './access.js';
 import { formatMessageDoc } from './formatMessage.js';
-
-const populateSender = { path: 'sender', select: 'name email avatarUrl' };
+import { isValidUuid } from '../utils/ids.js';
 
 export function attachSocketIO(httpServer) {
   const allowedOrigins = getCorsOrigins();
@@ -79,7 +77,6 @@ export function attachSocketIO(httpServer) {
             if (typeof cb === 'function') cb({ ok: false, error: 'Empty message' });
             return;
           }
-          const senderOid = new mongoose.Types.ObjectId(userId);
 
           if (channelId) {
             const check = await assertChannelAccess(channelId, userId);
@@ -89,27 +86,26 @@ export function attachSocketIO(httpServer) {
             }
             let threadParent = null;
             if (threadParentId) {
-              if (!mongoose.Types.ObjectId.isValid(threadParentId)) {
+              if (!isValidUuid(threadParentId)) {
                 if (typeof cb === 'function') cb({ ok: false, error: 'Invalid thread parent' });
                 return;
               }
-              const parent = await Message.findById(threadParentId);
-              if (!parent || parent.channel?.toString() !== channelId) {
+              const parent = await messages.findMessageById(threadParentId);
+              if (!parent || parent.channelId !== channelId) {
                 if (typeof cb === 'function') cb({ ok: false, error: 'Invalid thread' });
                 return;
               }
-              threadParent = parent._id;
+              threadParent = threadParentId;
             }
-            const msg = await Message.create({
-              sender: senderOid,
-              channel: channelId,
+            const msg = await messages.createChannelMessage({
+              senderId: userId,
+              channelId,
               content: text || (hasFile ? 'Attachment' : ''),
-              threadParent,
+              threadParentId: threadParent,
               attachmentUrl: attachmentUrl || '',
               attachmentMime: attachmentMime || '',
             });
-            const populated = await Message.findById(msg._id).populate(populateSender);
-            const payload = formatMessageDoc(populated);
+            const payload = formatMessageDoc(msg);
             io.to(`channel:${channelId}`).emit('receive_message', payload);
             if (typeof cb === 'function') cb({ ok: true, message: payload });
             return;
@@ -121,21 +117,18 @@ export function attachSocketIO(httpServer) {
               if (typeof cb === 'function') cb({ ok: false, error: check.error });
               return;
             }
-            const msg = await Message.create({
-              sender: senderOid,
-              conversation: conversationId,
+            const msg = await messages.createConversationMessage({
+              senderId: userId,
+              conversationId,
               content: text || (hasFile ? 'Attachment' : ''),
               attachmentUrl: attachmentUrl || '',
               attachmentMime: attachmentMime || '',
             });
-            await Conversation.findByIdAndUpdate(conversationId, { $set: { updatedAt: new Date() } });
-            const populated = await Message.findById(msg._id).populate(populateSender);
-            const payload = formatMessageDoc(populated);
-            io.to(`conversation:${conversationId}`).emit('receive_message', payload);
             const conv = check.conversation;
-            const other =
-              conv.participantLow.toString() === userId ? conv.participantHigh : conv.participantLow;
-            io.to(`user:${other.toString()}`).emit('notification', {
+            const payload = formatMessageDoc(msg);
+            io.to(`conversation:${conversationId}`).emit('receive_message', payload);
+            const other = conversations.getOtherParticipantId(conv, userId);
+            io.to(`user:${other}`).emit('notification', {
               type: 'dm',
               conversationId,
               preview: text.slice(0, 120),
@@ -177,6 +170,7 @@ export function attachSocketIO(httpServer) {
 /** Called from REST after edit/delete to sync clients */
 export function emitMessageUpdated(io, messageDoc) {
   const payload = formatMessageDoc(messageDoc);
+  if (!payload) return;
   if (payload.channelId) {
     io.to(`channel:${payload.channelId}`).emit('message_updated', payload);
   }

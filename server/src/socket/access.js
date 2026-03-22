@@ -1,36 +1,28 @@
-import mongoose from 'mongoose';
-import { Workspace } from '../models/Workspace.js';
-import { Channel } from '../models/Channel.js';
-import { Conversation } from '../models/Conversation.js';
-
-export function isWorkspaceMember(workspace, userId) {
-  return workspace.members.some((m) => m.user.toString() === userId);
-}
-
-export function canAccessChannel(channel, workspace, userId) {
-  if (!isWorkspaceMember(workspace, userId)) return false;
-  if (channel.type === 'public') return true;
-  return channel.members.some((id) => id.toString() === userId);
-}
+import { isValidUuid } from '../utils/ids.js';
+import * as workspaces from '../db/workspaces.js';
+import * as channels from '../db/channels.js';
+import * as conversations from '../db/conversations.js';
 
 export async function assertChannelAccess(channelId, userId) {
-  if (!mongoose.Types.ObjectId.isValid(channelId)) return { error: 'Invalid channel' };
-  const channel = await Channel.findById(channelId);
+  if (!isValidUuid(channelId)) return { error: 'Invalid channel' };
+  const channel = await channels.findChannelById(channelId);
   if (!channel) return { error: 'Channel not found' };
-  const ws = await Workspace.findById(channel.workspace);
-  if (!ws || !canAccessChannel(channel, ws, userId)) return { error: 'Forbidden' };
-  return { channel, workspace: ws };
+  if (!(await workspaces.isMember(channel.workspace_id, userId))) return { error: 'Forbidden' };
+  if (channel.type === 'public') return { channel };
+  const mids = await channels.listChannelMemberIds(channelId);
+  if (!mids.includes(userId)) return { error: 'Forbidden' };
+  return { channel };
 }
 
 export async function assertConversationAccess(conversationId, userId) {
-  if (!mongoose.Types.ObjectId.isValid(conversationId)) return { error: 'Invalid conversation' };
-  const conv = await Conversation.findById(conversationId);
+  if (!isValidUuid(conversationId)) return { error: 'Invalid conversation' };
+  const conv = await conversations.findConversationById(conversationId);
   if (!conv) return { error: 'Conversation not found' };
   const uid = userId.toString();
-  if (conv.participantLow.toString() !== uid && conv.participantHigh.toString() !== uid) {
+  if (String(conv.participant_low) !== uid && String(conv.participant_high) !== uid) {
     return { error: 'Forbidden' };
   }
-  const ws = await Workspace.findById(conv.workspace);
-  if (!ws || !isWorkspaceMember(ws, userId)) return { error: 'Forbidden' };
-  return { conversation: conv, workspace: ws };
+  const ws = await workspaces.findWorkspaceById(conv.workspace_id);
+  if (!ws || !(await workspaces.isMember(conv.workspace_id, userId))) return { error: 'Forbidden' };
+  return { conversation: conv };
 }

@@ -1,23 +1,22 @@
-# Deploy: GitHub + MongoDB Atlas + Render (API) + Vercel (UI)
+# Deploy: GitHub + Neon (Postgres) + Render (API) + Vercel (UI)
 
 ## Overview
 
 | Piece | Role |
 |--------|------|
 | **GitHub** | Hosts your code. Render and Vercel deploy from it. |
-| **MongoDB Atlas** | Database (`MONGODB_URI`). |
+| **Neon** | Serverless **PostgreSQL** (`DATABASE_URL`). |
 | **Render** | Runs the **Node server** (`server/`) — HTTP API + Socket.IO + file uploads. |
 | **Vercel** | Hosts the **React build** (`client/`). |
 
 ---
 
-## 1. MongoDB Atlas
+## 1. Neon (database)
 
-1. Create a cluster (free M0 is fine).
-2. **Database Access**: create a user + password.
-3. **Network Access**: `0.0.0.0/0` (allow from anywhere) so Render can connect — or use Render’s outbound IPs if you lock it down later.
-4. **Connect** → Drivers → copy the **SRV** connection string.
-5. Put the **database name** in the path, e.g. `...mongodb.net/syncwork?...`
+1. Create a project at [neon.tech](https://neon.tech) (free tier is fine).
+2. **Dashboard → Connect** — copy the **connection string** (`postgresql://user:pass@ep-....neon.tech/neondb?sslmode=require`).
+3. Put it in **Render → Environment** as `DATABASE_URL` and in local `server/.env` for development.
+4. The API applies `server/src/db/schema.sql` on startup (tables are created if missing).
 
 ---
 
@@ -52,7 +51,7 @@
 
    | Key | Value |
    |-----|--------|
-   | `MONGODB_URI` | Your Atlas SRV string (with DB name in path). |
+   | `DATABASE_URL` | Your Neon `postgresql://...` connection string. |
    | `JWT_SECRET` | Long random string (generate once, keep secret). |
    | `CLIENT_ORIGIN` | `http://localhost:5173,https://YOUR-VERCEL-APP.vercel.app` (comma-separated, **no spaces** after commas is OK). Include localhost if you still test locally against production API. |
    | `NODE_ENV` | `production` |
@@ -69,7 +68,7 @@
 |--------|-----|
 | **Build failed** / `npm run build` not found | **Build Command** must be `npm install` (or leave default). If you use `npm run build`, the repo now includes a no-op `build` script in `server/package.json`, but `npm install` is enough. |
 | **Root Directory** wrong | Must be exactly **`server`** (no leading slash). If empty, Render builds from repo root and won’t find `package.json` correctly. |
-| **Service crashed** / deploy fails after start | Set **`MONGODB_URI`**, **`JWT_SECRET`**, and **`CLIENT_ORIGIN`** in Render → Environment. Missing `JWT_SECRET` or bad Atlas URI causes the process to exit. |
+| **Service crashed** / deploy fails after start | Set **`DATABASE_URL`**, **`JWT_SECRET`**, and **`CLIENT_ORIGIN`** in Render → Environment. Missing `JWT_SECRET` or invalid `DATABASE_URL` causes the process to exit. |
 | **Blueprint / YAML error** | Skip `render.yaml` import — create the **Web Service** manually with the settings above. |
 | **Health check** | Optional: set **Health Check Path** to `/api/health` in Render service settings. |
 
@@ -101,8 +100,8 @@ The server binds to **`0.0.0.0`** and sets **`trust proxy`** for Render’s load
 
 ## 5. Checklist
 
-- [ ] Atlas user + network allow Render.
-- [ ] Render env: `MONGODB_URI`, `JWT_SECRET`, `CLIENT_ORIGIN` (includes Vercel URL).
+- [ ] Neon project created; `DATABASE_URL` copied.
+- [ ] Render env: `DATABASE_URL`, `JWT_SECRET`, `CLIENT_ORIGIN` (includes Vercel URL).
 - [ ] Vercel env: `VITE_API_URL` = Render URL.
 - [ ] Register/login on the **Vercel** site (not only localhost).
 - [ ] If CORS errors: `CLIENT_ORIGIN` must **exactly** match the browser origin (scheme + host, no path).
@@ -117,4 +116,4 @@ A sample `render.yaml` is in the repo root. You can use **Blueprint** on Render 
 
 ## Local development
 
-Leave **`VITE_API_URL` unset** (or empty) in `client/.env` so the app uses the Vite proxy to `localhost:5000`. Set **`CLIENT_ORIGIN`** in `server/.env` to include `http://localhost:5173`.
+Leave **`VITE_API_URL` unset** (or empty) in `client/.env` so the app uses the Vite proxy to `localhost:5000`. Set **`CLIENT_ORIGIN`** in `server/.env` to include `http://localhost:5173`. Set **`DATABASE_URL`** to your Neon dev branch or local Postgres.

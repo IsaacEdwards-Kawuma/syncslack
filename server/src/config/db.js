@@ -1,13 +1,29 @@
-import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import pg from 'pg';
 
-/** Atlas + PaaS: longer selection timeout; family 4 avoids rare IPv6/DNS issues from cloud egress. */
-const connectOptions = {
-  serverSelectionTimeoutMS: 30000,
-  family: 4,
-};
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export async function connectDB(uri) {
-  mongoose.set('strictQuery', true);
-  await mongoose.connect(uri, connectOptions);
-  console.log('MongoDB connected');
+/** Assigned in connectDB() so DATABASE_URL is read after dotenv (see server startup order). */
+export let pool = null;
+
+export async function connectDB() {
+  const conn = process.env.DATABASE_URL?.trim();
+  if (!conn) {
+    throw new Error('DATABASE_URL is not set');
+  }
+  const useSsl = !conn.includes('localhost') && !conn.includes('127.0.0.1');
+  pool = new pg.Pool({
+    connectionString: conn,
+    max: 15,
+    ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
+
+  const schemaPath = path.join(__dirname, '../db/schema.sql');
+  const sql = fs.readFileSync(schemaPath, 'utf8');
+  await pool.query(sql);
+  const r = await pool.query('SELECT 1 AS ok');
+  if (!r.rows[0]) throw new Error('PostgreSQL ping failed');
+  console.log('PostgreSQL connected (schema applied)');
 }

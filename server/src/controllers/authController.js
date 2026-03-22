@@ -1,18 +1,7 @@
 import bcrypt from 'bcryptjs';
-import { User } from '../models/User.js';
+import * as users from '../db/users.js';
 import { getJwtExpiresIn, getJwtSecret } from '../config/env.js';
 import { signToken } from '../utils/jwt.js';
-
-function safeUserFromDoc(doc) {
-  return {
-    id: doc._id.toString(),
-    email: doc.email,
-    name: doc.name,
-    avatarUrl: doc.avatarUrl || '',
-    theme: doc.theme || 'light',
-    createdAt: doc.createdAt,
-  };
-}
 
 const SALT_ROUNDS = 12;
 
@@ -25,20 +14,16 @@ export async function register(req, res) {
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
-    const existing = await User.findOne({ email: email.toLowerCase() });
+    const existing = await users.findUserByEmail(email.toLowerCase());
     if (existing) {
       return res.status(409).json({ error: 'Email already registered' });
     }
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const user = await User.create({
-      email: email.toLowerCase(),
-      passwordHash,
-      name: name.trim(),
-    });
+    const user = await users.createUser({ email: email.toLowerCase(), passwordHash, name: name.trim() });
     const secret = getJwtSecret();
     const expiresIn = getJwtExpiresIn();
-    const token = signToken({ sub: user._id.toString(), email: user.email }, secret, expiresIn);
-    return res.status(201).json({ user: user.toSafeJSON(), token, expiresIn });
+    const token = signToken({ sub: user.id, email: user.email }, secret, expiresIn);
+    return res.status(201).json({ user: users.mapUserPublic(user), token, expiresIn });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Registration failed' });
@@ -51,25 +36,18 @@ export async function login(req, res) {
     if (!email || !password) {
       return res.status(400).json({ error: 'email and password are required' });
     }
-    const user = await User.findOne({ email: String(email).toLowerCase().trim() })
-      .select('+passwordHash')
-      .lean();
-    if (!user || !user.passwordHash) {
+    const user = await users.findUserByEmail(String(email).toLowerCase().trim());
+    if (!user || !user.password_hash) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    let ok = false;
-    try {
-      ok = await bcrypt.compare(String(password), user.passwordHash);
-    } catch {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    const ok = await bcrypt.compare(String(password), user.password_hash);
     if (!ok) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     const secret = getJwtSecret();
     const expiresIn = getJwtExpiresIn();
-    const token = signToken({ sub: user._id.toString(), email: user.email }, secret, expiresIn);
-    return res.json({ user: safeUserFromDoc(user), token, expiresIn });
+    const token = signToken({ sub: user.id, email: user.email }, secret, expiresIn);
+    return res.json({ user: users.mapUserPublic(user), token, expiresIn });
   } catch (err) {
     console.error(err);
     const message = err instanceof Error ? err.message : 'Login failed';
@@ -79,9 +57,9 @@ export async function login(req, res) {
 
 export async function me(req, res) {
   try {
-    const user = await User.findById(req.user.sub);
+    const user = await users.findUserById(req.user.sub);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ user: user.toSafeJSON() });
+    return res.json({ user: users.mapUserPublic(user) });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Failed to load profile' });
@@ -94,9 +72,9 @@ export async function updateTheme(req, res) {
     if (!['light', 'dark'].includes(theme)) {
       return res.status(400).json({ error: 'theme must be light or dark' });
     }
-    const user = await User.findByIdAndUpdate(req.user.sub, { theme }, { new: true });
+    const user = await users.updateTheme(req.user.sub, theme);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ user: user.toSafeJSON() });
+    return res.json({ user: users.mapUserPublic(user) });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Update failed' });

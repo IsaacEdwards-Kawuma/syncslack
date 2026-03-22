@@ -34,12 +34,12 @@ If **Root Directory is empty**, set **Build Command** to `cd server && npm insta
 
 | Name | Value |
 |------|--------|
-| `MONGODB_URI` | Your MongoDB Atlas `mongodb+srv://...` string |
+| `DATABASE_URL` | Your **Neon** Postgres connection string (`postgresql://...` from Neon Dashboard → Connect) |
 | `JWT_SECRET` | Long random string |
 | `CLIENT_ORIGIN` | `http://localhost:5173,https://syncsllack.vercel.app` |
 | `NODE_ENV` | `production` |
 
-Atlas **Network Access:** allow **`0.0.0.0/0`** (or tighten later).
+Local dev: copy the same `DATABASE_URL` into `server/.env`.
 
 ---
 
