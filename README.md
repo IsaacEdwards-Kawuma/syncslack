@@ -1,6 +1,8 @@
 # Sync Work — Slack-like team chat
 
-Production-oriented monorepo: **React + Tailwind** (`client`), **Express + PostgreSQL (Neon) + Socket.IO** (`server`), **JWT + bcrypt** auth, workspaces, channels, DMs, threads, reactions, uploads, and dark mode.
+**Repository:** [https://github.com/IsaacEdwards-Kawuma/syncslack](https://github.com/IsaacEdwards-Kawuma/syncslack)
+
+Production-oriented monorepo: **React + Tailwind** (`client`), **Express + PostgreSQL (Neon) + Socket.IO** (`server`), **JWT + bcrypt** auth, workspaces, channels, DMs, threads, reactions, uploads, dark mode, **Settings / Profile / Help / Privacy** pages, and optional **browser push** (VAPID).
 
 ## Project layout
 
@@ -9,7 +11,7 @@ Production-oriented monorepo: **React + Tailwind** (`client`), **Express + Postg
 │   ├── src/
 │   │   ├── context/        # Auth, Socket
 │   │   ├── lib/api.js      # REST helper + token
-│   │   └── pages/          # Login, Register, Workspace UI
+│   │   └── pages/          # Login, Register, Workspace, Settings, Profile, Help, Privacy
 │   └── package.json
 ├── server/
 │   ├── src/
