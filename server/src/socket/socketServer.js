@@ -12,7 +12,11 @@ export function attachSocketIO(httpServer) {
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, callback) => {
-        callback(null, isOriginAllowed(origin));
+        if (origin == null || origin === '') return callback(null, true);
+        const o = String(origin).trim();
+        if (!o) return callback(null, true);
+        if (isOriginAllowed(o)) return callback(null, o);
+        return callback(null, false);
       },
       methods: ['GET', 'POST'],
       credentials: true,

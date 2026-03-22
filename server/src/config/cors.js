@@ -22,11 +22,13 @@ export function getCorsOrigins() {
  * - http://localhost:* and http://127.0.0.1:* (dev)
  */
 export function isOriginAllowed(origin) {
-  if (!origin) return true;
+  if (origin == null || origin === '') return true;
+  const o = String(origin).trim();
+  if (!o) return true;
   const list = getCorsOrigins();
-  if (list.includes(origin)) return true;
+  if (list.includes(o)) return true;
   try {
-    const u = new URL(origin);
+    const u = new URL(o);
     const host = u.hostname.toLowerCase();
     if (u.protocol === 'http:' && (host === 'localhost' || host === '127.0.0.1')) {
       return true;

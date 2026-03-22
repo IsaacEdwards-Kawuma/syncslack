@@ -30,17 +30,25 @@ app.set('trust proxy', 1);
 const httpServer = createServer(app);
 
 const allowedOrigins = getCorsOrigins();
+/** CORS must run before helmet so responses always get ACAO; reflect exact origin string when using credentials. */
 app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  cors({
+    origin: (origin, callback) => {
+      if (origin == null || origin === '') return callback(null, true);
+      const o = String(origin).trim();
+      if (!o) return callback(null, true);
+      if (isOriginAllowed(o)) return callback(null, o);
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204,
   })
 );
 app.use(
-  cors({
-    origin: (origin, cb) => {
-      cb(null, isOriginAllowed(origin));
-    },
-    credentials: true,
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
 app.use(express.json({ limit: '2mb' }));
@@ -65,6 +73,7 @@ const limiter = rateLimit({
   max: 500,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
 });
 app.use('/api/', limiter);
 
