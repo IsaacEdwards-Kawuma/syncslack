@@ -1,11 +1,14 @@
-# Optional Render Blueprint — import repo in Render UI and adjust names/env as needed.
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# If the YAML import errors, create the Web Service manually in the dashboard instead.
 services:
   - type: web
     name: sync-work-api
     runtime: node
+    plan: free
     rootDir: server
     buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production

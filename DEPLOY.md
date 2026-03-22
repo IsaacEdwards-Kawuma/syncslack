@@ -63,6 +63,18 @@
 
 **Note:** Free tier **spins down** after idle; first request can take ~30–60s.
 
+### Render troubleshooting (common errors)
+
+| Problem | Fix |
+|--------|-----|
+| **Build failed** / `npm run build` not found | **Build Command** must be `npm install` (or leave default). If you use `npm run build`, the repo now includes a no-op `build` script in `server/package.json`, but `npm install` is enough. |
+| **Root Directory** wrong | Must be exactly **`server`** (no leading slash). If empty, Render builds from repo root and won’t find `package.json` correctly. |
+| **Service crashed** / deploy fails after start | Set **`MONGODB_URI`**, **`JWT_SECRET`**, and **`CLIENT_ORIGIN`** in Render → Environment. Missing `JWT_SECRET` or bad Atlas URI causes the process to exit. |
+| **Blueprint / YAML error** | Skip `render.yaml` import — create the **Web Service** manually with the settings above. |
+| **Health check** | Optional: set **Health Check Path** to `/api/health` in Render service settings. |
+
+The server binds to **`0.0.0.0`** and sets **`trust proxy`** for Render’s load balancer.
+
 ---
 
 ## 4. Vercel (frontend)

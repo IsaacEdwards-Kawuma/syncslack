@@ -27,6 +27,9 @@ const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const app = express();
+/** Required behind Render / other reverse proxies (rate-limit, secure cookies, req.ip). */
+app.set('trust proxy', 1);
+
 const httpServer = createServer(app);
 
 const allowedOrigins = getCorsOrigins();
@@ -77,8 +80,9 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/syncwo
 async function main() {
   getJwtSecret();
   await connectDB(MONGODB_URI);
-  httpServer.listen(PORT, () => {
-    console.log(`HTTP + Socket.IO listening on http://localhost:${PORT}`);
+  /** Render and most PaaS require binding to 0.0.0.0, not only localhost. */
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`HTTP + Socket.IO listening on port ${PORT}`);
     console.log(`CORS origins: ${allowedOrigins.join(', ')}`);
   });
 }
