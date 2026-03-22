@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host --port 5173",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node -e \"console.error('Wrong package: this is the Vite client. On Render set Root Directory to server/ for the API (see render.yaml).'); process.exit(1)\""
   },
   "dependencies": {
     "react": "^18.3.1",
