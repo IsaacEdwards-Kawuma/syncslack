@@ -178,7 +178,8 @@ export async function searchWorkspace(req, res) {
     if (trimmed.length < 2) {
       return res.json({ results: [], type: 'messages' });
     }
-    const results = await searchWorkspaceMessages(workspaceId, req.user.sub, trimmed, 40);
+    const fromUserId = req.query.from || req.query.fromUser || null;
+    const results = await searchWorkspaceMessages(workspaceId, req.user.sub, trimmed, 40, fromUserId);
     return res.json({ results, type: 'messages' });
   } catch (err) {
     console.error(err);

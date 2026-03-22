@@ -11,6 +11,8 @@ import { assertChannelAccess, assertConversationAccess } from './access.js';
 import { formatMessageDoc } from './formatMessage.js';
 import { isValidUuid } from '../utils/ids.js';
 import { extractMentionedUserIds } from '../utils/mentions.js';
+import * as channelPrefs from '../db/channelPrefs.js';
+import { sendPushToUser } from '../services/webPush.js';
 
 const onlineByWorkspace = new Map();
 
@@ -24,7 +26,7 @@ function normalizeAttachments(attachmentUrl, attachmentMime, attachments) {
   return [];
 }
 
-async function notifyMentions(io, msg, senderId, workspaceId) {
+async function notifyMentions(io, msg, senderId, workspaceId, channelIdForMute = null) {
   const ids = extractMentionedUserIds(msg.content);
   if (!ids.length) return;
   const valid = [];
@@ -36,6 +38,7 @@ async function notifyMentions(io, msg, senderId, workspaceId) {
   }
   await messages.replaceMentions(msg.id, valid);
   for (const uid of valid) {
+    if (channelIdForMute && (await channelPrefs.isChannelMuted(uid, channelIdForMute))) continue;
     const n = await notifications.createNotification({
       userId: uid,
       type: 'mention',
@@ -52,6 +55,11 @@ async function notifyMentions(io, msg, senderId, workspaceId) {
       preview: msg.content.slice(0, 120),
       fromUserId: senderId,
     });
+    await sendPushToUser(uid, 'You were mentioned', msg.content.slice(0, 120), {
+      type: 'mention',
+      messageId: msg.id,
+      workspaceId,
+    });
   }
 }
 
@@ -66,6 +74,10 @@ async function emitDmNotifications(io, conv, conversationId, userId, text) {
           preview: text.slice(0, 120),
           fromUserId: userId,
         });
+        await sendPushToUser(other, 'New message', text.slice(0, 120), {
+          type: 'dm',
+          conversationId,
+        });
       }
     }
   } else {
@@ -76,6 +88,10 @@ async function emitDmNotifications(io, conv, conversationId, userId, text) {
         conversationId,
         preview: text.slice(0, 120),
         fromUserId: userId,
+      });
+      await sendPushToUser(other, 'Direct message', text.slice(0, 120), {
+        type: 'dm',
+        conversationId,
       });
     }
   }
@@ -194,6 +210,7 @@ export function attachSocketIO(httpServer) {
           attachmentUrl,
           attachmentMime,
           attachments,
+          alsoToChannel,
         },
         cb
       ) => {
@@ -225,17 +242,30 @@ export function attachSocketIO(httpServer) {
               }
               threadParent = threadParentId;
             }
+            const atc = Boolean(alsoToChannel && threadParent);
             const msg = await messages.createChannelMessage({
               senderId: userId,
               channelId,
               content: text || (hasFile ? 'Attachment' : ''),
               threadParentId: threadParent,
               attachments: attList,
+              alsoToChannel: atc,
             });
             const ch = await channels.findChannelById(channelId);
-            if (ch) await notifyMentions(io, msg, userId, ch.workspace_id);
+            if (ch) await notifyMentions(io, msg, userId, ch.workspace_id, channelId);
             const payload = formatMessageDoc(msg);
             io.to(`channel:${channelId}`).emit('receive_message', payload);
+            if (atc) {
+              const rootMirror = await messages.createChannelMessage({
+                senderId: userId,
+                channelId,
+                content: text || (hasFile ? 'Attachment' : ''),
+                threadParentId: null,
+                attachments: attList,
+                alsoToChannel: false,
+              });
+              io.to(`channel:${channelId}`).emit('receive_message', formatMessageDoc(rootMirror));
+            }
             if (typeof cb === 'function') cb({ ok: true, message: payload });
             return;
           }
@@ -268,7 +298,7 @@ export function attachSocketIO(httpServer) {
             });
             const conv = check.conversation;
             const payload = formatMessageDoc(msg);
-            await notifyMentions(io, msg, userId, conv.workspace_id);
+            await notifyMentions(io, msg, userId, conv.workspace_id, null);
             io.to(`conversation:${conversationId}`).emit('receive_message', payload);
             await emitDmNotifications(io, conv, conversationId, userId, text);
             if (typeof cb === 'function') cb({ ok: true, message: payload });

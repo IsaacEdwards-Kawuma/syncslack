@@ -98,6 +98,18 @@ export async function updateTheme(req, res) {
   }
 }
 
+export async function updateStatus(req, res) {
+  try {
+    const { statusText, statusEmoji } = req.body;
+    const user = await users.updateStatus(req.user.sub, statusText ?? '', statusEmoji ?? '');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({ user: users.mapUserPublic(user) });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Update failed' });
+  }
+}
+
 export async function forgotPassword(req, res) {
   try {
     const { email } = req.body;

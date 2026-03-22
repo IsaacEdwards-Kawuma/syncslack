@@ -11,6 +11,10 @@ import { uploadsDir } from './config/uploadsPath.js';
 import { getCorsOrigins, isOriginAllowed } from './config/cors.js';
 import { getJwtSecret } from './config/env.js';
 import { attachSocketIO } from './socket/socketServer.js';
+import { setupRedisAdapter } from './socket/redisAdapter.js';
+import { linkPreview } from './controllers/linkPreviewController.js';
+import { authMiddleware } from './middleware/auth.js';
+import webhookPublicRoutes from './routes/webhookPublicRoutes.js';
 
 import authRoutes from './routes/authRoutes.js';
 import workspaceRoutes from './routes/workspaceRoutes.js';
@@ -93,9 +97,8 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/push', pushRoutes);
-
-const io = attachSocketIO(httpServer);
-app.set('io', io);
+app.use('/api/webhooks', webhookPublicRoutes);
+app.get('/api/link-preview', authMiddleware, linkPreview);
 
 const PORT = Number(process.env.PORT) || 5000;
 
@@ -137,6 +140,10 @@ async function main() {
     console.error('Set DATABASE_URL to your Neon connection string (postgresql://user:pass@...neon.tech/neondb?sslmode=require).');
     process.exit(1);
   }
+
+  const io = attachSocketIO(httpServer);
+  app.set('io', io);
+  await setupRedisAdapter(io);
 
   /** Render and most PaaS require binding to 0.0.0.0, not only localhost. */
   httpServer.on('error', (err) => {

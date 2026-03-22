@@ -13,3 +13,7 @@ export async function listEndpointsForUser(userId) {
   const r = await pool.query(`SELECT endpoint, keys FROM push_subscriptions WHERE user_id = $1`, [userId]);
   return r.rows;
 }
+
+export async function deleteByEndpoint(endpoint) {
+  await pool.query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [endpoint]);
+}

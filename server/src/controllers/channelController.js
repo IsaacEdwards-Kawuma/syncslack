@@ -1,5 +1,7 @@
 import * as channels from '../db/channels.js';
 import * as workspaces from '../db/workspaces.js';
+import * as channelPrefs from '../db/channelPrefs.js';
+import * as webhooks from '../db/webhooks.js';
 import { isValidUuid } from '../utils/ids.js';
 
 async function canAccessChannel(ch, userId) {
@@ -110,5 +112,96 @@ export async function leaveChannel(req, res) {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Failed to leave channel' });
+  }
+}
+
+export async function getChannelNotificationPref(req, res) {
+  try {
+    const { channelId } = req.params;
+    if (!isValidUuid(channelId)) return res.status(400).json({ error: 'Invalid channel id' });
+    const channel = await channels.findChannelById(channelId);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (!(await canAccessChannel(channel, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    const level = await channelPrefs.getLevel(req.user.sub, channelId);
+    return res.json({ level });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to load preference' });
+  }
+}
+
+export async function setChannelNotificationPref(req, res) {
+  try {
+    const { channelId } = req.params;
+    const { level } = req.body;
+    if (!isValidUuid(channelId)) return res.status(400).json({ error: 'Invalid channel id' });
+    if (!['all', 'mentions', 'mute'].includes(level)) {
+      return res.status(400).json({ error: 'level must be all, mentions, or mute' });
+    }
+    const channel = await channels.findChannelById(channelId);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (!(await canAccessChannel(channel, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    const next = await channelPrefs.setLevel(req.user.sub, channelId, level);
+    return res.json({ level: next });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to save preference' });
+  }
+}
+
+export async function createWebhookForChannel(req, res) {
+  try {
+    const { channelId } = req.params;
+    const { name } = req.body;
+    if (!isValidUuid(channelId)) return res.status(400).json({ error: 'Invalid channel id' });
+    const channel = await channels.findChannelById(channelId);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (!(await canAccessChannel(channel, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    const hook = await webhooks.create({
+      workspaceId: channel.workspace_id,
+      channelId,
+      name,
+      createdBy: req.user.sub,
+    });
+    return res.status(201).json({
+      ok: true,
+      id: hook.id,
+      token: hook.secret_token,
+      url: `/api/webhooks/incoming/${hook.secret_token}`,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to create webhook' });
+  }
+}
+
+export async function listWebhooksForChannel(req, res) {
+  try {
+    const { channelId } = req.params;
+    if (!isValidUuid(channelId)) return res.status(400).json({ error: 'Invalid channel id' });
+    const channel = await channels.findChannelById(channelId);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (!(await canAccessChannel(channel, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    const rows = await webhooks.listForChannel(channelId);
+    return res.json({ webhooks: rows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to list webhooks' });
+  }
+}
+
+export async function deleteWebhookForChannel(req, res) {
+  try {
+    const { channelId, webhookId } = req.params;
+    if (!isValidUuid(channelId) || !isValidUuid(webhookId)) return res.status(400).json({ error: 'Invalid id' });
+    const channel = await channels.findChannelById(channelId);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (!(await canAccessChannel(channel, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    const ok = await webhooks.deleteWebhook(webhookId, req.user.sub);
+    if (!ok) return res.status(404).json({ error: 'Webhook not found' });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to delete webhook' });
   }
 }

@@ -1,6 +1,7 @@
 import { pool } from '../config/db.js';
+import { isValidUuid } from '../utils/ids.js';
 
-export async function searchWorkspaceMessages(workspaceId, userId, query, limit = 40) {
+export async function searchWorkspaceMessages(workspaceId, userId, query, limit = 40, fromUserId = null) {
   const safe = String(query).trim().slice(0, 200).replace(/%/g, '').replace(/_/g, '');
   if (!safe) return [];
   const q = `%${safe}%`;
@@ -14,6 +15,7 @@ export async function searchWorkspaceMessages(workspaceId, userId, query, limit 
       AND m.deleted_at IS NULL
       AND m.thread_parent_id IS NULL
       AND m.content ILIKE $2
+      ${fromUserId && isValidUuid(fromUserId) ? ' AND m.sender_id = $5::uuid' : ''}
       AND (
         ch.type = 'public'
         OR EXISTS (
@@ -32,13 +34,19 @@ export async function searchWorkspaceMessages(workspaceId, userId, query, limit 
     WHERE c.workspace_id = $1::uuid
       AND m.deleted_at IS NULL
       AND m.content ILIKE $2
+      ${fromUserId && isValidUuid(fromUserId) ? ' AND m.sender_id = $5::uuid' : ''}
   `;
+
+  const params =
+    fromUserId && isValidUuid(fromUserId)
+      ? [workspaceId, q, userId, limit, fromUserId]
+      : [workspaceId, q, userId, limit];
 
   const r = await pool.query(
     `(${channelSql}) UNION ALL (${convSql})
      ORDER BY created_at DESC
      LIMIT $4`,
-    [workspaceId, q, userId, limit]
+    params
   );
 
   return r.rows.map((row) => ({

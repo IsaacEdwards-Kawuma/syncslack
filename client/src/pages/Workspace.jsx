@@ -7,6 +7,7 @@ import { api, getApiBaseUrl, getPublicAssetUrl, getToken } from '../lib/api.js';
 import { readMessagePreviewInNotif } from '../lib/settingsPrefs.js';
 import Avatar from '../components/Avatar.jsx';
 import { getMentionContext, mentionsToMarkdownLinks } from '../utils/mentions.js';
+import { applySlashExpansion } from '../utils/slashCommands.js';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀'];
 
@@ -97,6 +98,11 @@ export default function Workspace() {
   const [addGroupPick, setAddGroupPick] = useState(() => new Set());
   const [showMention, setShowMention] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [channelNotifLevel, setChannelNotifLevel] = useState('all');
+  const [searchFromUserId, setSearchFromUserId] = useState('');
+  const [threadAlsoToChannel, setThreadAlsoToChannel] = useState(false);
+  const [showSavedModal, setShowSavedModal] = useState(false);
+  const [savedList, setSavedList] = useState([]);
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -235,7 +241,8 @@ export default function Workspace() {
           setSearchResults([]);
           return;
         }
-        api(`/workspaces/${workspaceId}/search?q=${enc}&type=messages`)
+        const fromQ = searchFromUserId ? `&from=${encodeURIComponent(searchFromUserId)}` : '';
+        api(`/workspaces/${workspaceId}/search?q=${enc}&type=messages${fromQ}`)
           .then((d) => setSearchResults(d.results || []))
           .catch(console.error);
         return;
@@ -251,7 +258,7 @@ export default function Workspace() {
         .catch(console.error);
     }, 350);
     return () => clearTimeout(t);
-  }, [searchQ, workspaceId, searchTab]);
+  }, [searchQ, workspaceId, searchTab, searchFromUserId]);
 
   useEffect(() => {
     if (!socket || !connected || !workspaceId) return undefined;
@@ -270,6 +277,39 @@ export default function Workspace() {
     () => workspaces.find((w) => w.id === workspaceId),
     [workspaces, workspaceId]
   );
+
+  const draftKey = useMemo(() => {
+    if (channelId) return `ch:${channelId}`;
+    if (conversationId) return `conv:${conversationId}`;
+    return null;
+  }, [channelId, conversationId]);
+
+  useEffect(() => {
+    if (!channelId) {
+      setChannelNotifLevel('all');
+      return;
+    }
+    api(`/channels/${channelId}/notification-prefs`)
+      .then((d) => setChannelNotifLevel(d.level || 'all'))
+      .catch(() => {});
+  }, [channelId]);
+
+  useEffect(() => {
+    if (!draftKey) {
+      setInput('');
+      return;
+    }
+    try {
+      const d = localStorage.getItem(`syncwork_draft_${draftKey}`);
+      setInput(d || '');
+    } catch {
+      setInput('');
+    }
+  }, [draftKey]);
+
+  useEffect(() => {
+    setThreadAlsoToChannel(false);
+  }, [threadParent?.id]);
 
   useEffect(() => {
     if (!socket || !connected) return undefined;
@@ -443,7 +483,15 @@ export default function Workspace() {
   const showMentionPicker = (channelId || conversationId) && (showMention || mentionCtx.open);
 
   function onInputChange(e) {
-    setInput(e.target.value);
+    const value = e.target.value;
+    setInput(value);
+    if (draftKey) {
+      try {
+        localStorage.setItem(`syncwork_draft_${draftKey}`, value);
+      } catch {
+        /* ignore */
+      }
+    }
     emitTyping(true);
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => emitTyping(false), 800);
@@ -462,7 +510,9 @@ export default function Workspace() {
   }
 
   async function sendMessage(extraAttachments) {
-    const text = input.trim();
+    const raw = input.trim();
+    const expanded = applySlashExpansion(raw);
+    const text = expanded.trim();
     const attList = Array.isArray(extraAttachments) ? extraAttachments : [];
     const hasFile = attList.length > 0;
     if (!text && !hasFile) return;
@@ -473,7 +523,10 @@ export default function Workspace() {
     };
     if (channelId) {
       payload.channelId = channelId;
-      if (threadParent) payload.threadParentId = threadParent.id;
+      if (threadParent) {
+        payload.threadParentId = threadParent.id;
+        payload.alsoToChannel = Boolean(threadAlsoToChannel);
+      }
     } else if (conversationId) {
       payload.conversationId = conversationId;
       if (threadParent) payload.threadParentId = threadParent.id;
@@ -483,6 +536,13 @@ export default function Workspace() {
       if (!res?.ok) console.error(res?.error);
     });
     setInput('');
+    if (draftKey) {
+      try {
+        localStorage.removeItem(`syncwork_draft_${draftKey}`);
+      } catch {
+        /* ignore */
+      }
+    }
     setShowMention(false);
     emitTyping(false);
   }
@@ -744,6 +804,20 @@ export default function Workspace() {
               </button>
             ))}
           </div>
+          {searchTab === 'messages' && members.length > 0 ? (
+            <select
+              value={searchFromUserId}
+              onChange={(e) => setSearchFromUserId(e.target.value)}
+              className="mb-1.5 w-full rounded border border-[#522653] bg-black/20 px-2 py-1 text-[10px] text-[#d1d2d3]"
+            >
+              <option value="">From: anyone</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  From: {m.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <input
             type="search"
             value={searchQ}
@@ -922,6 +996,12 @@ export default function Workspace() {
             <Avatar user={user} size={8} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-white">{user?.name}</div>
+              {user?.statusText || user?.statusEmoji ? (
+                <div className="truncate text-[10px] text-[#b39fb3]">
+                  {user?.statusEmoji ? `${user.statusEmoji} ` : ''}
+                  {user?.statusText || ''}
+                </div>
+              ) : null}
               <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs">
                 <Link to="/profile" className="text-[#b39fb3] hover:underline">
                   Profile
@@ -971,6 +1051,43 @@ export default function Workspace() {
             </button>
           ) : null}
           {typingName ? <span className="text-sm text-slate-500">{typingName} is typing…</span> : null}
+          {channelId ? (
+            <select
+              value={channelNotifLevel}
+              onChange={async (e) => {
+                const level = e.target.value;
+                setChannelNotifLevel(level);
+                try {
+                  await api(`/channels/${channelId}/notification-prefs`, { method: 'PATCH', body: { level } });
+                } catch (err) {
+                  console.error(err);
+                }
+              }}
+              className="max-w-[7.5rem] rounded border border-slate-200 bg-white px-1 py-1 text-[10px] dark:border-slate-600 dark:bg-slate-800"
+              title="Notifications for this channel"
+            >
+              <option value="all">All activity</option>
+              <option value="mentions">Mentions</option>
+              <option value="mute">Mute</option>
+            </select>
+          ) : null}
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+            title="Saved messages"
+            onClick={async () => {
+              setShowSavedModal(true);
+              try {
+                const { messages: list } = await api('/messages/saved');
+                setSavedList(list || []);
+              } catch (e) {
+                console.error(e);
+                setSavedList([]);
+              }
+            }}
+          >
+            Saved
+          </button>
           {(channelId || conversationId) && workspaceId ? (
             <button
               type="button"
@@ -1236,18 +1353,31 @@ export default function Workspace() {
                 ))}
               </div>
               <div className="shrink-0 border-t border-slate-200 p-2 dark:border-slate-700">
+                {channelId ? (
+                  <label className="mb-1.5 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={threadAlsoToChannel}
+                      onChange={(e) => setThreadAlsoToChannel(e.target.checked)}
+                    />
+                    Also send to channel
+                  </label>
+                ) : null}
                 <textarea
                   rows={2}
                   className="w-full resize-y rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-                  placeholder="Reply… (Enter to send, Shift+Enter newline)"
+                  placeholder="Reply… (Enter to send, Shift+Enter newline). Try /shrug"
                   onKeyDown={(e) => {
                     if (e.key !== 'Enter' || e.shiftKey) return;
                     e.preventDefault();
-                    const text = e.currentTarget.value.trim();
+                    const raw = e.currentTarget.value.trim();
+                    const text = applySlashExpansion(raw).trim();
                     if (!text || !socket) return;
                     const payload = { content: text, threadParentId: threadParent.id };
-                    if (channelId) payload.channelId = channelId;
-                    else if (conversationId) payload.conversationId = conversationId;
+                    if (channelId) {
+                      payload.channelId = channelId;
+                      payload.alsoToChannel = Boolean(threadAlsoToChannel);
+                    } else if (conversationId) payload.conversationId = conversationId;
                     socket.emit('send_message', payload, () => {});
                     e.currentTarget.value = '';
                   }}
@@ -1262,6 +1392,22 @@ export default function Workspace() {
         <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1.5rem,env(safe-area-inset-right))] z-[90] max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-4 py-2 text-sm text-white shadow-lg">
           {toast.text}
         </div>
+      ) : null}
+
+      {showSavedModal ? (
+        <Modal title="Saved messages" onClose={() => setShowSavedModal(false)}>
+          <div className="max-h-72 space-y-2 overflow-y-auto text-sm">
+            {savedList.length === 0 ? (
+              <p className="text-slate-500 dark:text-slate-400">No saved messages yet. Use “Save” on a message.</p>
+            ) : null}
+            {savedList.map((m) => (
+              <div key={m.id} className="rounded border border-slate-200 p-2 text-xs dark:border-slate-600">
+                <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
+                <div className="mt-1 whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300">{m.content}</div>
+              </div>
+            ))}
+          </div>
+        </Modal>
       ) : null}
 
       {showCreateWs ? (
@@ -1640,6 +1786,22 @@ function MessageBlock({ message, members = [], selfId, onReaction, onThread, com
     }
   }
 
+  async function pinMsg() {
+    try {
+      await api(`/messages/${message.id}/pin`, { method: 'POST' });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function saveMsg() {
+    try {
+      await api(`/messages/${message.id}/save`, { method: 'POST' });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   const mine = message.senderId === selfId;
   const showHeader = compact || !groupWithPrev;
 
@@ -1730,6 +1892,16 @@ function MessageBlock({ message, members = [], selfId, onReaction, onThread, com
           {!message.deletedAt && message.content ? (
             <button type="button" className="text-xs text-slate-500 hover:underline" onClick={copyText}>
               Copy
+            </button>
+          ) : null}
+          {!message.deletedAt && message.channelId && !message.threadParentId ? (
+            <button type="button" className="text-xs text-slate-500 hover:underline" onClick={pinMsg}>
+              Pin
+            </button>
+          ) : null}
+          {!message.deletedAt ? (
+            <button type="button" className="text-xs text-slate-500 hover:underline" onClick={saveMsg}>
+              Save
             </button>
           ) : null}
           {mine && !message.deletedAt ? (

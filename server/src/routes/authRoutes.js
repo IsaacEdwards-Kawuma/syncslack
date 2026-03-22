@@ -4,6 +4,7 @@ import {
   login,
   me,
   updateTheme,
+  updateStatus,
   forgotPassword,
   resetPassword,
   changePassword,
@@ -21,5 +22,6 @@ r.post('/reset-password', resetPassword);
 r.post('/change-password', authMiddleware, changePassword);
 r.get('/me', authMiddleware, me);
 r.patch('/me/theme', authMiddleware, updateTheme);
+r.patch('/me/status', authMiddleware, updateStatus);
 
 export default r;

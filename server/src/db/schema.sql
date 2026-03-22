@@ -192,3 +192,44 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   UNIQUE (user_id, endpoint)
 );
 CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+
+-- Extended features (idempotent)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status_text VARCHAR(140) NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status_emoji VARCHAR(32) NOT NULL DEFAULT '';
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS also_to_channel BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS pinned_messages (
+  channel_id UUID NOT NULL REFERENCES channels (id) ON DELETE CASCADE,
+  message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+  pinned_by UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (channel_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pins_channel ON pinned_messages (channel_id);
+
+CREATE TABLE IF NOT EXISTS saved_messages (
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_saved_user ON saved_messages (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS channel_notification_prefs (
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  channel_id UUID NOT NULL REFERENCES channels (id) ON DELETE CASCADE,
+  level VARCHAR(20) NOT NULL DEFAULT 'all' CHECK (level IN ('all', 'mentions', 'mute')),
+  PRIMARY KEY (user_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS incoming_webhooks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+  channel_id UUID NOT NULL REFERENCES channels (id) ON DELETE CASCADE,
+  secret_token TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL DEFAULT '',
+  created_by UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_incoming_webhooks_channel ON incoming_webhooks (channel_id);

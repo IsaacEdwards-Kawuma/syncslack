@@ -10,12 +10,14 @@ export function mapUserPublic(row) {
     theme: row.theme || 'light',
     createdAt: row.created_at,
     emailVerified: Boolean(row.email_verified_at),
+    statusText: row.status_text ?? '',
+    statusEmoji: row.status_emoji ?? '',
   };
 }
 
 export async function findUserByEmail(email) {
   const r = await pool.query(
-    `SELECT id, email, password_hash, name, avatar_url, theme, email_verified_at, created_at, updated_at
+    `SELECT id, email, password_hash, name, avatar_url, theme, email_verified_at, status_text, status_emoji, created_at, updated_at
      FROM users WHERE email = $1`,
     [String(email).toLowerCase().trim()]
   );
@@ -24,7 +26,7 @@ export async function findUserByEmail(email) {
 
 export async function findUserById(id) {
   const r = await pool.query(
-    `SELECT id, email, password_hash, name, avatar_url, theme, email_verified_at, created_at, updated_at
+    `SELECT id, email, password_hash, name, avatar_url, theme, email_verified_at, status_text, status_emoji, created_at, updated_at
      FROM users WHERE id = $1`,
     [id]
   );
@@ -35,7 +37,7 @@ export async function createUser({ email, passwordHash, name, emailVerified = tr
   const r = await pool.query(
     `INSERT INTO users (email, password_hash, name, email_verified_at)
      VALUES ($1, $2, $3, CASE WHEN $4 THEN NOW() ELSE NULL END)
-     RETURNING id, email, name, avatar_url, theme, email_verified_at, created_at, updated_at`,
+     RETURNING id, email, name, avatar_url, theme, email_verified_at, status_text, status_emoji, created_at, updated_at`,
     [email.toLowerCase(), passwordHash, name.trim(), emailVerified]
   );
   return r.rows[0];
@@ -44,8 +46,17 @@ export async function createUser({ email, passwordHash, name, emailVerified = tr
 export async function updateTheme(userId, theme) {
   const r = await pool.query(
     `UPDATE users SET theme = $2, updated_at = NOW() WHERE id = $1
-     RETURNING id, email, name, avatar_url, theme, email_verified_at, created_at, updated_at`,
+     RETURNING id, email, name, avatar_url, theme, email_verified_at, status_text, status_emoji, created_at, updated_at`,
     [userId, theme]
+  );
+  return r.rows[0] || null;
+}
+
+export async function updateStatus(userId, statusText, statusEmoji) {
+  const r = await pool.query(
+    `UPDATE users SET status_text = $2, status_emoji = $3, updated_at = NOW() WHERE id = $1
+     RETURNING id, email, name, avatar_url, theme, email_verified_at, status_text, status_emoji, created_at, updated_at`,
+    [userId, String(statusText ?? '').slice(0, 140), String(statusEmoji ?? '').slice(0, 32)]
   );
   return r.rows[0] || null;
 }

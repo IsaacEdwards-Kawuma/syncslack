@@ -29,7 +29,7 @@ export async function findWorkspaceBySlug(slug) {
 
 export async function listMembers(workspaceId) {
   const r = await pool.query(
-    `SELECT wm.user_id, wm.role, u.name, u.email, u.avatar_url
+    `SELECT wm.user_id, wm.role, u.name, u.email, u.avatar_url, u.status_text, u.status_emoji
      FROM workspace_members wm
      JOIN users u ON u.id = wm.user_id
      WHERE wm.workspace_id = $1`,

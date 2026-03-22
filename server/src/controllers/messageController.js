@@ -2,6 +2,8 @@ import * as messages from '../db/messages.js';
 import * as channels from '../db/channels.js';
 import * as conversations from '../db/conversations.js';
 import * as workspaces from '../db/workspaces.js';
+import * as pins from '../db/pins.js';
+import * as savedMessages from '../db/savedMessages.js';
 import { emitMessageUpdated } from '../socket/socketServer.js';
 import { isValidUuid } from '../utils/ids.js';
 
@@ -161,10 +163,113 @@ export async function listWorkspaceMembers(req, res) {
       email: m.email,
       avatarUrl: m.avatar_url || '',
       role: m.role,
+      statusText: m.status_text || '',
+      statusEmoji: m.status_emoji || '',
     }));
     return res.json({ members: users });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Failed to list members' });
+  }
+}
+
+export async function pinMessageHandler(req, res) {
+  try {
+    const { messageId } = req.params;
+    if (!isValidUuid(messageId)) return res.status(400).json({ error: 'Invalid message id' });
+    const msg = await messages.findMessageById(messageId);
+    if (!msg?.channelId) return res.status(400).json({ error: 'Only channel messages can be pinned' });
+    const ch = await channels.findChannelById(msg.channelId);
+    if (!(await canAccessChannel(ch, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    await pins.pinMessage(msg.channelId, messageId, req.user.sub);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to pin' });
+  }
+}
+
+export async function unpinMessageHandler(req, res) {
+  try {
+    const { messageId } = req.params;
+    if (!isValidUuid(messageId)) return res.status(400).json({ error: 'Invalid message id' });
+    const msg = await messages.findMessageById(messageId);
+    if (!msg?.channelId) return res.status(400).json({ error: 'Invalid' });
+    const ch = await channels.findChannelById(msg.channelId);
+    if (!(await canAccessChannel(ch, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    await pins.unpinMessage(msg.channelId, messageId);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to unpin' });
+  }
+}
+
+export async function listChannelPins(req, res) {
+  try {
+    const { channelId } = req.params;
+    if (!isValidUuid(channelId)) return res.status(400).json({ error: 'Invalid channel id' });
+    const channel = await channels.findChannelById(channelId);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (!(await canAccessChannel(channel, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    const ids = await pins.listPinnedMessageIds(channelId);
+    const out = [];
+    for (const id of ids) {
+      const m = await messages.findMessageById(id);
+      if (m && !m.deletedAt) out.push(m);
+    }
+    return res.json({ messages: out });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to list pins' });
+  }
+}
+
+export async function saveMessageHandler(req, res) {
+  try {
+    const { messageId } = req.params;
+    if (!isValidUuid(messageId)) return res.status(400).json({ error: 'Invalid message id' });
+    const msg = await messages.findMessageById(messageId);
+    if (!msg || msg.deletedAt) return res.status(404).json({ error: 'Message not found' });
+    if (msg.channelId) {
+      const ch = await channels.findChannelById(msg.channelId);
+      if (!(await canAccessChannel(ch, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+    } else if (msg.conversationId) {
+      if (!(await conversations.isConversationMember(msg.conversationId, req.user.sub))) {
+        return res.status(403).json({ error: 'Not allowed' });
+      }
+    } else return res.status(400).json({ error: 'Invalid message' });
+    await savedMessages.saveMessage(req.user.sub, messageId);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to save' });
+  }
+}
+
+export async function unsaveMessageHandler(req, res) {
+  try {
+    const { messageId } = req.params;
+    if (!isValidUuid(messageId)) return res.status(400).json({ error: 'Invalid message id' });
+    await savedMessages.unsaveMessage(req.user.sub, messageId);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to unsave' });
+  }
+}
+
+export async function listSavedMessages(req, res) {
+  try {
+    const ids = await savedMessages.listSavedMessageIds(req.user.sub, 50);
+    const out = [];
+    for (const id of ids) {
+      const m = await messages.findMessageById(id);
+      if (m && !m.deletedAt) out.push(m);
+    }
+    return res.json({ messages: out });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to list saved' });
   }
 }

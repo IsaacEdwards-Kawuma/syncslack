@@ -12,6 +12,7 @@ export function formatMessageDoc(m) {
     editedAt: m.editedAt,
     deletedAt: m.deletedAt,
     threadParentId: m.threadParentId ?? null,
+    alsoToChannel: Boolean(m.alsoToChannel),
     reactions: m.reactions || [],
     attachmentUrl: m.attachmentUrl || '',
     attachmentMime: m.attachmentMime || '',

@@ -1,10 +1,29 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { api } from '../lib/api.js';
 import Avatar from '../components/Avatar.jsx';
 
 export default function ProfilePage() {
-  const { user, setTheme } = useAuth();
+  const { user, setTheme, refresh } = useAuth();
   const dark = user?.theme === 'dark';
+  const [statusText, setStatusText] = useState(user?.statusText || '');
+  const [statusEmoji, setStatusEmoji] = useState(user?.statusEmoji || '');
+
+  useEffect(() => {
+    setStatusText(user?.statusText || '');
+    setStatusEmoji(user?.statusEmoji || '');
+  }, [user?.statusText, user?.statusEmoji]);
+
+  async function saveStatus(e) {
+    e.preventDefault();
+    try {
+      await api('/auth/me/status', { method: 'PATCH', body: { statusText, statusEmoji } });
+      await refresh();
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8">
@@ -27,6 +46,30 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      <form onSubmit={saveStatus} className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Status</h2>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Shown to people in your workspaces.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input
+            value={statusEmoji}
+            onChange={(e) => setStatusEmoji(e.target.value)}
+            maxLength={32}
+            placeholder="Emoji"
+            className="w-20 rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900"
+          />
+          <input
+            value={statusText}
+            onChange={(e) => setStatusText(e.target.value)}
+            maxLength={140}
+            placeholder="What’s your status?"
+            className="min-w-[12rem] flex-1 rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900"
+          />
+        </div>
+        <button type="submit" className="mt-3 rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-600">
+          Save status
+        </button>
+      </form>
 
       <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Appearance</h2>

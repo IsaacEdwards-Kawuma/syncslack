@@ -31,6 +31,7 @@ export function formatMessageRow(m, senderRow) {
     editedAt: m.edited_at,
     deletedAt: m.deleted_at,
     threadParentId: m.thread_parent_id || null,
+    alsoToChannel: Boolean(m.also_to_channel),
     reactions: normalizeReactions(m.reactions),
     attachmentUrl: m.attachment_url || '',
     attachmentMime: m.attachment_mime || '',
@@ -201,6 +202,7 @@ export async function createChannelMessage({
   attachmentUrl,
   attachmentMime,
   attachments,
+  alsoToChannel = false,
 }) {
   const attList =
     attachments && attachments.length
@@ -210,10 +212,10 @@ export async function createChannelMessage({
         : [];
   const first = attList[0] || {};
   const r = await pool.query(
-    `INSERT INTO messages (sender_id, channel_id, conversation_id, thread_parent_id, content, attachment_url, attachment_mime)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6)
+    `INSERT INTO messages (sender_id, channel_id, conversation_id, thread_parent_id, content, attachment_url, attachment_mime, also_to_channel)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [senderId, channelId, threadParentId || null, content, first.url || '', first.mime || '']
+    [senderId, channelId, threadParentId || null, content, first.url || '', first.mime || '', !!alsoToChannel]
   );
   const id = r.rows[0].id;
   await insertAttachments(id, attList);
@@ -237,8 +239,8 @@ export async function createConversationMessage({
         : [];
   const first = attList[0] || {};
   const r = await pool.query(
-    `INSERT INTO messages (sender_id, channel_id, conversation_id, thread_parent_id, content, attachment_url, attachment_mime)
-     VALUES ($1, NULL, $2, $3, $4, $5, $6)
+    `INSERT INTO messages (sender_id, channel_id, conversation_id, thread_parent_id, content, attachment_url, attachment_mime, also_to_channel)
+     VALUES ($1, NULL, $2, $3, $4, $5, $6, FALSE)
      RETURNING *`,
     [senderId, conversationId, threadParentId || null, content, first.url || '', first.mime || '']
   );
