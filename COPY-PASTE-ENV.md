@@ -47,3 +47,15 @@ You should see JSON with `"ok": true`.
 ## Local `server/.env`
 
 Do **not** commit `.env`. You can mirror `CLIENT_ORIGIN` from Render for local testing.
+
+---
+
+## Vercel `404 NOT_FOUND`
+
+1. **Root Directory** (Project → Settings → General):
+   - **Option A:** set to **`client`** → Vercel builds the Vite app from `client/` (uses `client/vercel.json`).
+   - **Option B:** leave **empty** → uses repo root `package.json` + `vercel.json` and outputs **`client/dist`**.
+
+2. After changing settings or pushing config, **Redeploy** (Deployments → … → Redeploy).
+
+3. Confirm **Build** logs show `vite build` succeeding and **Output** is `dist` or `client/dist`.

@@ -1,0 +1,8 @@
+{
+  "name": "sync-work",
+  "private": true,
+  "description": "Monorepo root — Vercel can build from here if Root Directory is not set to client/",
+  "scripts": {
+    "build": "cd client && npm run build"
+  }
+}
