@@ -1,50 +1,49 @@
 # Copy-paste environment variables
 
-Your Vercel app (frontend): **https://syncsllack.vercel.app**
-
-**API health checks must use your Render URL**, not Vercel — e.g. `https://YOUR-SERVICE.onrender.com/health` or `.../api/health`.
-
-Replace `YOUR-RENDER-URL` below with your **Render Web Service** URL (e.g. `https://sync-work-api.onrender.com`) — from Render dashboard → your API → copy URL. **No trailing slash.**
+| Service | URL |
+|---------|-----|
+| **Render (API)** | **https://syncslack.onrender.com** |
+| **Vercel (frontend)** | **https://syncsllack.vercel.app** |
 
 ---
 
 ## Vercel → Project → Settings → Environment Variables
 
-Add for **Production** (and **Preview** if you want previews to work):
+Add for **Production** (and **Preview** if you want):
 
-| Name | Value |
-|------|--------|
-| `VITE_API_URL` | `YOUR-RENDER-URL` |
+| Name | Value (copy exactly) |
+|------|----------------------|
+| `VITE_API_URL` | `https://syncslack.onrender.com` |
 
-**Example** (after you know your Render URL):
-
-| Name | Value |
-|------|--------|
-| `VITE_API_URL` | `https://sync-work-api.onrender.com` |
-
-Then **Redeploy** the project.
+**No trailing slash.** Then **Save** → **Deployments** → **Redeploy**.
 
 ---
 
-## Render → your Web Service → Environment
-
-**Required** (or the service exits with status 1):
+## Render → Web Service → Environment
 
 | Name | Value |
 |------|--------|
-| `MONGODB_URI` | Your full **MongoDB Atlas** SRV string (`mongodb+srv://...`) including database name in the path. |
-| `JWT_SECRET` | A long random string (generate locally, never commit). |
+| `MONGODB_URI` | Your MongoDB Atlas `mongodb+srv://...` string |
+| `JWT_SECRET` | Long random string |
 | `CLIENT_ORIGIN` | `http://localhost:5173,https://syncsllack.vercel.app` |
 | `NODE_ENV` | `production` |
 
-Optional: `JWT_EXPIRES_IN` (default `7d`).
-
-**Atlas:** under **Network Access**, allow **`0.0.0.0/0`** (or Render’s egress IPs) so the cloud can connect.
-
-Then **Save** and **Manual Deploy** if needed.
+Atlas **Network Access:** allow **`0.0.0.0/0`** (or tighten later).
 
 ---
 
-## Local `server/.env` (your machine only)
+## Quick checks (API on Render)
 
-You can use the same `CLIENT_ORIGIN` line as Render so local + Vercel are listed. Do **not** commit `.env`.
+Open in a browser:
+
+- https://syncslack.onrender.com/
+- https://syncslack.onrender.com/health
+- https://syncslack.onrender.com/api/health  
+
+You should see JSON with `"ok": true`.
+
+---
+
+## Local `server/.env`
+
+Do **not** commit `.env`. You can mirror `CLIENT_ORIGIN` from Render for local testing.
