@@ -30,7 +30,7 @@ That usually means Vercel is not serving your Vite build (wrong folder or empty 
 3. **Save** → **Deployments** → **Redeploy** the latest commit.
 
 **Do not** set Output to `client/dist` when Root Directory is already `client` (that looks for `client/client/dist` and fails).  
-Config for the UI lives only in **`client/vercel.json`** (Vite → **`dist`**). There is **no** `vercel.json` at the repo root so settings don’t fight each other—set **Root Directory** to **`client`** on Vercel.
+Config for the UI lives in **`client/vercel.json`** (SPA rewrites so `/register` etc. serve `index.html`). **Project settings** must still set **Framework = Vite**, **Output = `dist`**, **Root = `client`** — the JSON does **not** override those; it only adds rewrites + favicon.
 
 ---
 
