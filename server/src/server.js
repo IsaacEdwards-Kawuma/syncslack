@@ -124,9 +124,10 @@ async function main() {
   try {
     await connectDB(mongoUri);
   } catch (err) {
-    const msg = String(err?.message || err);
+    const msg = [err?.message, err?.cause?.message].filter(Boolean).join(' ') || String(err);
+    const code = err?.code ?? err?.cause?.code;
     console.error('[FATAL] MongoDB connection failed:', msg);
-    if (/bad auth|authentication failed/i.test(msg)) {
+    if (/bad auth|authentication failed/i.test(msg) || code === 18) {
       console.error(
         'Auth failed: the DB user/password in Render → MONGODB_URI does not match Atlas → Database Access. Reset the user password in Atlas, paste the new connection string into Render (URL-encode special characters in the password).'
       );
