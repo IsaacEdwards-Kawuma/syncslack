@@ -30,7 +30,7 @@ That usually means Vercel is not serving your Vite build (wrong folder or empty 
 3. **Save** → **Deployments** → **Redeploy** the latest commit.
 
 **Do not** set Output to `client/dist` when Root Directory is already `client` (that looks for `client/client/dist` and fails).  
-`client/vercel.json` in the repo configures `outputDirectory: dist` for the **`client`** root.
+Config for the UI lives only in **`client/vercel.json`** (Vite → **`dist`**). There is **no** `vercel.json` at the repo root so settings don’t fight each other—set **Root Directory** to **`client`** on Vercel.
 
 ---
 
@@ -79,8 +79,8 @@ Do **not** commit `.env`. You can mirror `CLIENT_ORIGIN` from Render for local t
 ## Vercel `404 NOT_FOUND`
 
 1. **Root Directory** (Project → Settings → General):
-   - **Option A:** set to **`client`** → Vercel builds the Vite app from `client/` (uses `client/vercel.json`).
-   - **Option B:** leave **empty** → uses repo root `package.json` + `vercel.json` and outputs **`client/dist`**.
+   - **Recommended:** set to **`client`** → build command `npm run build`, output **`dist`** (see **`client/vercel.json`**).
+   - **Alternate:** leave **empty** → set **Build Command** to `npm run build` (root `package.json` runs `cd client && npm run build`) and **Output Directory** to **`client/dist`** manually in the dashboard (no root `vercel.json`).
 
 2. After changing settings or pushing config, **Redeploy** (Deployments → … → Redeploy).
 
