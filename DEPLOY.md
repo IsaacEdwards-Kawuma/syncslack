@@ -94,6 +94,8 @@ The server binds to **`0.0.0.0`** and sets **`trust proxy`** for Render’s load
 
 **If you see `404: NOT_FOUND`:** almost always **Output Directory** or **Root Directory** is wrong. With **Root Directory = `client`**, Output must be **`dist`** (not `client/dist`). With **Root Directory empty**, Output must be **`client/dist`**. Redeploy after fixing.
 
+**If you see `No Output Directory named "dist" found` after a successful `vite build`:** In **Project → Settings → General → Build & Development Settings**, set **Output Directory** to exactly `dist` (no spaces or hidden characters). The repo’s `client/vercel.json` also sets `"outputDirectory": "dist"` so Vercel picks it up. Ensure **Root Directory** is **`client`** so `dist` resolves to `client/dist` after the build.
+
 5. Go back to **Render** → **Environment** → set `CLIENT_ORIGIN` to include your real Vercel URL, e.g.  
    `http://localhost:5173,https://your-app.vercel.app`  
    Redeploy Render after changing env.
