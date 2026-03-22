@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { api, getApiBaseUrl, getPublicAssetUrl, getToken } from '../lib/api.js';
+import { readMessagePreviewInNotif } from '../lib/settingsPrefs.js';
 import Avatar from '../components/Avatar.jsx';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀'];
@@ -230,7 +231,16 @@ export default function Workspace() {
     const onNotify = (n) => {
       loadNotifications().catch(() => {});
       if (n.type === 'dm' || n.type === 'mention') {
-        setToast({ text: n.type === 'mention' ? `Mention: ${n.preview || ''}` : `New message: ${n.preview || ''}` });
+        const showPreview = readMessagePreviewInNotif();
+        const text =
+          n.type === 'mention'
+            ? showPreview
+              ? `Mention: ${n.preview || ''}`
+              : 'You were mentioned'
+            : showPreview
+              ? `New message: ${n.preview || ''}`
+              : 'New message';
+        setToast({ text });
         setTimeout(() => setToast(null), 4000);
       }
     };
