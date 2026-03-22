@@ -19,6 +19,17 @@ Add for **Production** (and **Preview** if you want):
 
 ---
 
+## Render → Web Service (API)
+
+**Important:** **Root Directory** must be **`server`** (not the repo root).  
+**Build Command:** `npm install` · **Start Command:** `npm start`
+
+If **Root Directory is empty**, set **Build Command** to `cd server && npm install` so `server/node_modules` exists, and **Start Command** to `npm start` (the repo root `package.json` now includes `start` → runs the API in `server/`).
+
+**Recommended:** Root Directory = **`server`**, Build = **`npm install`**, Start = **`npm start`** — no `cd` needed.
+
+---
+
 ## Render → Web Service → Environment
 
 | Name | Value |
