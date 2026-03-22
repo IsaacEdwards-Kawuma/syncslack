@@ -23,6 +23,8 @@ export async function connectDB() {
   const schemaPath = path.join(__dirname, '../db/schema.sql');
   const sql = fs.readFileSync(schemaPath, 'utf8');
   await pool.query(sql);
+  const { runDataMigrations } = await import('../db/migrate.js');
+  await runDataMigrations();
   const r = await pool.query('SELECT 1 AS ok');
   if (!r.rows[0]) throw new Error('PostgreSQL ping failed');
   console.log('PostgreSQL connected (schema applied)');

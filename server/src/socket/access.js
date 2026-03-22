@@ -18,10 +18,7 @@ export async function assertConversationAccess(conversationId, userId) {
   if (!isValidUuid(conversationId)) return { error: 'Invalid conversation' };
   const conv = await conversations.findConversationById(conversationId);
   if (!conv) return { error: 'Conversation not found' };
-  const uid = userId.toString();
-  if (String(conv.participant_low) !== uid && String(conv.participant_high) !== uid) {
-    return { error: 'Forbidden' };
-  }
+  if (!(await conversations.isConversationMember(conversationId, userId))) return { error: 'Forbidden' };
   const ws = await workspaces.findWorkspaceById(conv.workspace_id);
   if (!ws || !(await workspaces.isMember(conv.workspace_id, userId))) return { error: 'Forbidden' };
   return { conversation: conv };

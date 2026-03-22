@@ -34,6 +34,7 @@ export function formatMessageRow(m, senderRow) {
     reactions: normalizeReactions(m.reactions),
     attachmentUrl: m.attachment_url || '',
     attachmentMime: m.attachment_mime || '',
+    attachments: [],
   };
 }
 
@@ -51,6 +52,41 @@ function rowToMessageAndSender(row) {
   return { m, senderRow };
 }
 
+async function fetchAttachmentsMap(messageIds) {
+  if (!messageIds.length) return new Map();
+  const r = await pool.query(
+    `SELECT id, message_id, url, mime FROM message_attachments WHERE message_id = ANY($1::uuid[]) ORDER BY created_at ASC`,
+    [messageIds]
+  );
+  const map = new Map();
+  for (const row of r.rows) {
+    const list = map.get(row.message_id) || [];
+    list.push({ id: row.id, url: row.url, mime: row.mime });
+    map.set(row.message_id, list);
+  }
+  return map;
+}
+
+function mergeAttachments(msg, attMap) {
+  const fromTable = attMap.get(msg.id) || [];
+  const legacy =
+    msg.attachmentUrl && !fromTable.length
+      ? [{ id: null, url: msg.attachmentUrl, mime: msg.attachmentMime || '' }]
+      : [];
+  msg.attachments = fromTable.length ? fromTable : legacy;
+  if (msg.attachments.length) {
+    msg.attachmentUrl = msg.attachments[0].url;
+    msg.attachmentMime = msg.attachments[0].mime;
+  }
+  return msg;
+}
+
+async function enrichList(msgs) {
+  const ids = msgs.map((m) => m.id);
+  const attMap = await fetchAttachmentsMap(ids);
+  return msgs.map((m) => mergeAttachments(m, attMap));
+}
+
 export async function findMessageById(id) {
   const r = await pool.query(
     `SELECT m.*, u.name AS sender_name, u.email AS sender_email, u.avatar_url AS sender_avatar_url
@@ -61,7 +97,9 @@ export async function findMessageById(id) {
   );
   if (!r.rows[0]) return null;
   const { m, senderRow } = rowToMessageAndSender(r.rows[0]);
-  return formatMessageRow(m, senderRow);
+  const msg = formatMessageRow(m, senderRow);
+  const attMap = await fetchAttachmentsMap([id]);
+  return mergeAttachments(msg, attMap);
 }
 
 export async function listChannelRootMessages(channelId, before, limit) {
@@ -87,12 +125,13 @@ export async function listChannelRootMessages(channelId, before, limit) {
      LIMIT $2`,
     [channelId, limit, beforeTs, beforeId]
   );
-  return r.rows
+  const list = r.rows
     .map((row) => {
       const { m, senderRow } = rowToMessageAndSender(row);
       return formatMessageRow(m, senderRow);
     })
     .reverse();
+  return enrichList(list);
 }
 
 export async function listThreadReplies(parentId) {
@@ -104,10 +143,11 @@ export async function listThreadReplies(parentId) {
      ORDER BY m.created_at ASC, m.id ASC`,
     [parentId]
   );
-  return r.rows.map((row) => {
+  const list = r.rows.map((row) => {
     const { m, senderRow } = rowToMessageAndSender(row);
     return formatMessageRow(m, senderRow);
   });
+  return enrichList(list);
 }
 
 export async function listConversationMessages(conversationId, before, limit) {
@@ -132,12 +172,24 @@ export async function listConversationMessages(conversationId, before, limit) {
      LIMIT $2`,
     [conversationId, limit, beforeTs, beforeId]
   );
-  return r.rows
+  const list = r.rows
     .map((row) => {
       const { m, senderRow } = rowToMessageAndSender(row);
       return formatMessageRow(m, senderRow);
     })
     .reverse();
+  return enrichList(list);
+}
+
+async function insertAttachments(messageId, attachments) {
+  if (!attachments?.length) return;
+  for (const a of attachments) {
+    if (!a?.url) continue;
+    await pool.query(
+      `INSERT INTO message_attachments (message_id, url, mime) VALUES ($1, $2, $3)`,
+      [messageId, a.url, a.mime || '']
+    );
+  }
 }
 
 export async function createChannelMessage({
@@ -147,14 +199,24 @@ export async function createChannelMessage({
   threadParentId,
   attachmentUrl,
   attachmentMime,
+  attachments,
 }) {
+  const attList =
+    attachments && attachments.length
+      ? attachments
+      : attachmentUrl
+        ? [{ url: attachmentUrl, mime: attachmentMime || '' }]
+        : [];
+  const first = attList[0] || {};
   const r = await pool.query(
     `INSERT INTO messages (sender_id, channel_id, conversation_id, thread_parent_id, content, attachment_url, attachment_mime)
      VALUES ($1, $2, NULL, $3, $4, $5, $6)
      RETURNING *`,
-    [senderId, channelId, threadParentId || null, content, attachmentUrl || '', attachmentMime || '']
+    [senderId, channelId, threadParentId || null, content, first.url || '', first.mime || '']
   );
-  return findMessageById(r.rows[0].id);
+  const id = r.rows[0].id;
+  await insertAttachments(id, attList);
+  return findMessageById(id);
 }
 
 export async function createConversationMessage({
@@ -163,15 +225,35 @@ export async function createConversationMessage({
   content,
   attachmentUrl,
   attachmentMime,
+  attachments,
 }) {
+  const attList =
+    attachments && attachments.length
+      ? attachments
+      : attachmentUrl
+        ? [{ url: attachmentUrl, mime: attachmentMime || '' }]
+        : [];
+  const first = attList[0] || {};
   const r = await pool.query(
     `INSERT INTO messages (sender_id, channel_id, conversation_id, thread_parent_id, content, attachment_url, attachment_mime)
      VALUES ($1, NULL, $2, NULL, $3, $4, $5)
      RETURNING *`,
-    [senderId, conversationId, content, attachmentUrl || '', attachmentMime || '']
+    [senderId, conversationId, content, first.url || '', first.mime || '']
   );
+  const id = r.rows[0].id;
+  await insertAttachments(id, attList);
   await touchConversationUpdatedAt(conversationId);
-  return findMessageById(r.rows[0].id);
+  return findMessageById(id);
+}
+
+export async function replaceMentions(messageId, mentionedUserIds) {
+  await pool.query(`DELETE FROM message_mentions WHERE message_id = $1`, [messageId]);
+  for (const uid of mentionedUserIds) {
+    await pool.query(
+      `INSERT INTO message_mentions (message_id, mentioned_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [messageId, uid]
+    );
+  }
 }
 
 export async function lastMessagePreview(conversationId) {

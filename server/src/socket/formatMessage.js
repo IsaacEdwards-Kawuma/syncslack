@@ -15,5 +15,6 @@ export function formatMessageDoc(m) {
     reactions: m.reactions || [],
     attachmentUrl: m.attachmentUrl || '',
     attachmentMime: m.attachmentMime || '',
+    attachments: m.attachments || [],
   };
 }

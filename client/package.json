@@ -10,6 +10,7 @@
     "start": "node -e \"console.error('Wrong package: this is the Vite client. On Render set Root Directory to server/ for the API (see render.yaml).'); process.exit(1)\""
   },
   "dependencies": {
+    "react-markdown": "^9.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",

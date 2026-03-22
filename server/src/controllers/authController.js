@@ -1,7 +1,9 @@
 import bcrypt from 'bcryptjs';
 import * as users from '../db/users.js';
+import * as authTokens from '../db/authTokens.js';
 import { getJwtExpiresIn, getJwtSecret } from '../config/env.js';
 import { signToken } from '../utils/jwt.js';
+import { sendMail, publicAppBaseUrl } from '../utils/mail.js';
 
 const SALT_ROUNDS = 12;
 
@@ -19,7 +21,22 @@ export async function register(req, res) {
       return res.status(409).json({ error: 'Email already registered' });
     }
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const user = await users.createUser({ email: email.toLowerCase(), passwordHash, name: name.trim() });
+    const smtp = Boolean(process.env.SMTP_HOST?.trim());
+    const user = await users.createUser({
+      email: email.toLowerCase(),
+      passwordHash,
+      name: name.trim(),
+      emailVerified: !smtp,
+    });
+    if (smtp) {
+      const raw = await authTokens.createToken(user.id, authTokens.PURPOSE_EMAIL_VERIFY, 72);
+      const link = `${publicAppBaseUrl()}/verify-email?token=${encodeURIComponent(raw)}`;
+      await sendMail({
+        to: user.email,
+        subject: 'Verify your email',
+        text: `Open this link to verify your account:\n${link}`,
+      });
+    }
     const secret = getJwtSecret();
     const expiresIn = getJwtExpiresIn();
     const token = signToken({ sub: user.id, email: user.email }, secret, expiresIn);
@@ -78,5 +95,75 @@ export async function updateTheme(req, res) {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Update failed' });
+  }
+}
+
+export async function forgotPassword(req, res) {
+  try {
+    const { email } = req.body;
+    if (!email?.trim()) return res.status(400).json({ error: 'email is required' });
+    const user = await users.findUserByEmail(String(email).toLowerCase().trim());
+    if (user) {
+      const raw = await authTokens.createToken(user.id, authTokens.PURPOSE_PASSWORD_RESET, 2);
+      const link = `${publicAppBaseUrl()}/reset-password?token=${encodeURIComponent(raw)}`;
+      await sendMail({
+        to: user.email,
+        subject: 'Reset your password',
+        text: `Reset your password (valid 2 hours):\n${link}`,
+      });
+    }
+    return res.json({ ok: true, message: 'If an account exists, a reset link was sent.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Request failed' });
+  }
+}
+
+export async function resetPassword(req, res) {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'token and password are required' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    const userId = await authTokens.consumeToken(token, authTokens.PURPOSE_PASSWORD_RESET);
+    if (!userId) return res.status(400).json({ error: 'Invalid or expired token' });
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    await users.updatePasswordHash(userId, passwordHash);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Reset failed' });
+  }
+}
+
+export async function changePassword(req, res) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'currentPassword and newPassword are required' });
+    }
+    if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    const user = await users.findUserById(req.user.sub);
+    if (!user?.password_hash) return res.status(404).json({ error: 'User not found' });
+    const ok = await bcrypt.compare(String(currentPassword), user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Current password is incorrect' });
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await users.updatePasswordHash(req.user.sub, passwordHash);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Change failed' });
+  }
+}
+
+export async function verifyEmail(req, res) {
+  try {
+    const token = req.query.token || req.body?.token;
+    const userId = await authTokens.consumeToken(token, authTokens.PURPOSE_EMAIL_VERIFY);
+    if (!userId) return res.status(400).json({ error: 'Invalid or expired token' });
+    await users.setEmailVerifiedNow(userId);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Verification failed' });
   }
 }

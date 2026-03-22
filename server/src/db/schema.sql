@@ -84,3 +84,101 @@ CREATE INDEX IF NOT EXISTS idx_messages_channel_root ON messages (channel_id, cr
   WHERE deleted_at IS NULL AND thread_parent_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages (conversation_id, created_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages (thread_parent_id, created_at);
+
+-- ── Migrations / extended schema (idempotent) ─────────────────────────────────
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+
+UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()) WHERE email_verified_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  purpose VARCHAR(32) NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_hash ON auth_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_user ON auth_tokens(user_id);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  type VARCHAR(40) NOT NULL,
+  workspace_id UUID REFERENCES workspaces (id) ON DELETE CASCADE,
+  message_id UUID REFERENCES messages (id) ON DELETE SET NULL,
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS workspace_invites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  role VARCHAR(20) NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'member')),
+  invited_by UUID NOT NULL REFERENCES users (id),
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID REFERENCES workspaces (id) ON DELETE CASCADE,
+  actor_id UUID NOT NULL REFERENCES users (id),
+  action VARCHAR(80) NOT NULL,
+  meta JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ws ON audit_log(workspace_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS message_mentions (
+  message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+  mentioned_user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  PRIMARY KEY (message_id, mentioned_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS message_attachments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  mime TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_message_attachments_msg ON message_attachments(message_id);
+
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'direct';
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_workspace_id_participant_low_participant_high_key;
+ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_participant_low_participant_high_check;
+
+ALTER TABLE conversations ALTER COLUMN participant_low DROP NOT NULL;
+ALTER TABLE conversations ALTER COLUMN participant_high DROP NOT NULL;
+
+ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_check;
+
+ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_kind_participants_check;
+
+ALTER TABLE conversations ADD CONSTRAINT conversations_kind_participants_check CHECK (
+  (kind = 'direct' AND participant_low IS NOT NULL AND participant_high IS NOT NULL AND participant_low < participant_high)
+  OR (kind = 'group' AND participant_low IS NULL AND participant_high IS NULL)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_direct_pair
+  ON conversations (workspace_id, participant_low, participant_high)
+  WHERE kind = 'direct' OR kind IS NULL;
+
+CREATE TABLE IF NOT EXISTS conversation_members (
+  conversation_id UUID NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (conversation_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_conv_members_user ON conversation_members(user_id);
+
+ALTER TABLE workspace_invites DROP CONSTRAINT IF EXISTS workspace_invites_role_check;
+ALTER TABLE workspace_invites ADD CONSTRAINT workspace_invites_role_check CHECK (role IN ('admin', 'member'));

@@ -1,6 +1,15 @@
 import slugify from '../utils/slugify.js';
 import * as workspaces from '../db/workspaces.js';
+import * as invites from '../db/invites.js';
+import * as audit from '../db/audit.js';
+import { searchWorkspaceMessages } from '../db/search.js';
+import { publicAppBaseUrl } from '../utils/mail.js';
 import { isValidUuid } from '../utils/ids.js';
+
+async function canManageWorkspace(workspaceId, userId) {
+  const role = await workspaces.getMemberRole(workspaceId, userId);
+  return role === 'owner' || role === 'admin';
+}
 
 export async function createWorkspace(req, res) {
   try {
@@ -82,5 +91,162 @@ export async function joinWorkspace(req, res) {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Failed to join workspace' });
+  }
+}
+
+export async function joinByInvite(req, res) {
+  try {
+    const { token } = req.body;
+    if (!token?.trim()) return res.status(400).json({ error: 'token is required' });
+    const inv = await invites.findValidInviteByToken(token.trim());
+    if (!inv) return res.status(404).json({ error: 'Invalid or expired invite' });
+    const userId = req.user.sub;
+    const ws = await workspaces.findWorkspaceById(inv.workspace_id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    if (await workspaces.isMember(ws.id, userId)) {
+      const members = await workspaces.listMembers(ws.id);
+      return res.json({ workspace: workspaces.formatWorkspace(ws, members), alreadyMember: true });
+    }
+    await workspaces.addMember(ws.id, userId, inv.role);
+    await audit.logAction({
+      workspaceId: ws.id,
+      actorId: userId,
+      action: 'member_joined_invite',
+      meta: { inviteId: inv.id },
+    });
+    const full = await workspaces.findWorkspaceById(ws.id);
+    const members = await workspaces.listMembers(ws.id);
+    return res.json({ workspace: workspaces.formatWorkspace(full, members) });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to join workspace' });
+  }
+}
+
+export async function createWorkspaceInvite(req, res) {
+  try {
+    const { workspaceId } = req.params;
+    const { role } = req.body;
+    if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace id' });
+    const r = role === 'admin' ? 'admin' : 'member';
+    if (!(await canManageWorkspace(workspaceId, req.user.sub))) {
+      return res.status(403).json({ error: 'Admin or owner required' });
+    }
+    const row = await invites.createInvite({
+      workspaceId,
+      invitedBy: req.user.sub,
+      role: r,
+      ttlDays: 14,
+    });
+    const base = publicAppBaseUrl();
+    return res.status(201).json({
+      token: row.token,
+      expiresAt: row.expires_at,
+      inviteUrl: `${base}/?invite=${encodeURIComponent(row.token)}`,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to create invite' });
+  }
+}
+
+export async function searchWorkspace(req, res) {
+  try {
+    const { workspaceId } = req.params;
+    const q = req.query.q;
+    if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace id' });
+    if (!q || String(q).trim().length < 2) {
+      return res.json({ results: [] });
+    }
+    if (!(await workspaces.isMember(workspaceId, req.user.sub))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+    const results = await searchWorkspaceMessages(workspaceId, req.user.sub, String(q).trim(), 40);
+    return res.json({ results });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Search failed' });
+  }
+}
+
+export async function updateWorkspaceMember(req, res) {
+  try {
+    const { workspaceId, memberUserId } = req.params;
+    const { role } = req.body;
+    if (!isValidUuid(workspaceId) || !isValidUuid(memberUserId)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    if (!['admin', 'member'].includes(role)) {
+      return res.status(400).json({ error: 'role must be admin or member' });
+    }
+    if (!(await canManageWorkspace(workspaceId, req.user.sub))) {
+      return res.status(403).json({ error: 'Admin or owner required' });
+    }
+    const targetRole = await workspaces.getMemberRole(workspaceId, memberUserId);
+    if (!targetRole) return res.status(404).json({ error: 'Member not found' });
+    if (targetRole === 'owner') return res.status(400).json({ error: 'Cannot change owner role' });
+    const actorRole = await workspaces.getMemberRole(workspaceId, req.user.sub);
+    if (actorRole === 'admin' && targetRole === 'admin') {
+      return res.status(403).json({ error: 'Only owner can change admins' });
+    }
+    await workspaces.updateMemberRole(workspaceId, memberUserId, role);
+    await audit.logAction({
+      workspaceId,
+      actorId: req.user.sub,
+      action: 'member_role_updated',
+      meta: { memberUserId, role },
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Update failed' });
+  }
+}
+
+export async function removeWorkspaceMember(req, res) {
+  try {
+    const { workspaceId, memberUserId } = req.params;
+    if (!isValidUuid(workspaceId) || !isValidUuid(memberUserId)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    if (memberUserId === req.user.sub) {
+      return res.status(400).json({ error: 'Use leave workspace instead' });
+    }
+    if (!(await canManageWorkspace(workspaceId, req.user.sub))) {
+      return res.status(403).json({ error: 'Admin or owner required' });
+    }
+    const targetRole = await workspaces.getMemberRole(workspaceId, memberUserId);
+    if (!targetRole) return res.status(404).json({ error: 'Member not found' });
+    if (targetRole === 'owner') return res.status(400).json({ error: 'Cannot remove owner' });
+    const actorRole = await workspaces.getMemberRole(workspaceId, req.user.sub);
+    if (actorRole === 'admin' && targetRole === 'admin') {
+      return res.status(403).json({ error: 'Only owner can remove an admin' });
+    }
+    await workspaces.removeMember(workspaceId, memberUserId);
+    await audit.logAction({
+      workspaceId,
+      actorId: req.user.sub,
+      action: 'member_removed',
+      meta: { memberUserId },
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Remove failed' });
+  }
+}
+
+export async function listWorkspaceAudit(req, res) {
+  try {
+    const { workspaceId } = req.params;
+    if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace id' });
+    if (!(await canManageWorkspace(workspaceId, req.user.sub))) {
+      return res.status(403).json({ error: 'Admin or owner required' });
+    }
+    const rows = await audit.listForWorkspace(workspaceId, 200);
+    return res.json({ audit: rows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to load audit log' });
   }
 }

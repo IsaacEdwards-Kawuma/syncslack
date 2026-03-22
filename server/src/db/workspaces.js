@@ -63,6 +63,30 @@ export async function isMember(workspaceId, userId) {
   return r.rowCount > 0;
 }
 
+export async function getMemberRole(workspaceId, userId) {
+  const r = await pool.query(
+    `SELECT role FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`,
+    [workspaceId, userId]
+  );
+  return r.rows[0]?.role || null;
+}
+
+export async function updateMemberRole(workspaceId, userId, role) {
+  const r = await pool.query(
+    `UPDATE workspace_members SET role = $3 WHERE workspace_id = $1 AND user_id = $2 RETURNING user_id`,
+    [workspaceId, userId, role]
+  );
+  return r.rowCount > 0;
+}
+
+export async function removeMember(workspaceId, userId) {
+  const r = await pool.query(
+    `DELETE FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`,
+    [workspaceId, userId]
+  );
+  return r.rowCount > 0;
+}
+
 export async function createWorkspaceWithGeneral({ name, description, slug, ownerId }) {
   const client = await pool.connect();
   try {

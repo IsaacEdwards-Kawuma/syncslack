@@ -63,7 +63,7 @@ export async function listConversationMessages(req, res) {
     const conv = await conversations.findConversationById(conversationId);
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
     const uid = req.user.sub;
-    if (String(conv.participant_low) !== uid && String(conv.participant_high) !== uid) {
+    if (!(await conversations.isConversationMember(conversationId, uid))) {
       return res.status(403).json({ error: 'Not a participant' });
     }
     const list = await messages.listConversationMessages(conversationId, before || null, limit);
@@ -152,6 +152,7 @@ export async function listWorkspaceMembers(req, res) {
       name: m.name,
       email: m.email,
       avatarUrl: m.avatar_url || '',
+      role: m.role,
     }));
     return res.json({ members: users });
   } catch (err) {
