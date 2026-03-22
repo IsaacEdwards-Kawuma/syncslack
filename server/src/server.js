@@ -124,10 +124,21 @@ async function main() {
   try {
     await connectDB(mongoUri);
   } catch (err) {
-    console.error('[FATAL] MongoDB connection failed:', err?.message || err);
-    console.error(
-      'Check MONGODB_URI, Atlas user/password, and Network Access (allow 0.0.0.0/0 for testing).'
-    );
+    const msg = String(err?.message || err);
+    console.error('[FATAL] MongoDB connection failed:', msg);
+    if (/bad auth|authentication failed/i.test(msg)) {
+      console.error(
+        'Auth failed: the DB user/password in Render → MONGODB_URI does not match Atlas → Database Access. Reset the user password in Atlas, paste the new connection string into Render (URL-encode special characters in the password).'
+      );
+    } else if (/whitelist|IP address|timed out|ReplicaSetNoPrimary|ECONNREFUSED/i.test(msg)) {
+      console.error(
+        'Network: Atlas → Network Access → add 0.0.0.0/0 (or confirm MONGODB_URI host matches this cluster).'
+      );
+    } else {
+      console.error(
+        'Check MONGODB_URI, Atlas user/password, and Network Access (allow 0.0.0.0/0 for testing).'
+      );
+    }
     process.exit(1);
   }
 
