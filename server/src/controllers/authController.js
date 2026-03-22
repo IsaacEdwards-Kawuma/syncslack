@@ -110,6 +110,23 @@ export async function updateStatus(req, res) {
   }
 }
 
+export async function updateAvatar(req, res) {
+  try {
+    let { avatarUrl } = req.body;
+    avatarUrl = String(avatarUrl ?? '').trim();
+    if (!avatarUrl.startsWith('/uploads/')) {
+      return res.status(400).json({ error: 'avatarUrl must be a path from file upload (e.g. /uploads/...)' });
+    }
+    if (avatarUrl.length > 500) return res.status(400).json({ error: 'Invalid avatarUrl' });
+    const user = await users.updateAvatarUrl(req.user.sub, avatarUrl);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({ user: users.mapUserPublic(user) });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Update failed' });
+  }
+}
+
 export async function forgotPassword(req, res) {
   try {
     const { email } = req.body;

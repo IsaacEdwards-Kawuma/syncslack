@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
@@ -66,6 +66,8 @@ export default function Workspace() {
   const { user, logout, setTheme } = useAuth();
   const { socket, connected } = useSocket();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [workspaces, setWorkspaces] = useState([]);
   const [workspaceId, setWorkspaceId] = useState(null);
@@ -112,6 +114,7 @@ export default function Workspace() {
 
   const [threadParent, setThreadParent] = useState(null);
   const [threadReplies, setThreadReplies] = useState([]);
+  const threadParentRef = useRef(null);
 
   const [toast, setToast] = useState(null);
 
@@ -130,6 +133,8 @@ export default function Workspace() {
   const stickToBottomRef = useRef(true);
   const fileRef = useRef(null);
   const [showJumpLatest, setShowJumpLatest] = useState(false);
+  const notifDebounceRef = useRef(null);
+  const lastVisibilityRefetchAt = useRef(0);
 
   const refetchWorkspaces = useCallback(async () => {
     const { workspaces: list } = await api('/workspaces');
@@ -141,6 +146,42 @@ export default function Workspace() {
     const { notifications: n } = await api('/notifications');
     setNotifications(n || []);
   }, []);
+
+  useEffect(() => {
+    threadParentRef.current = threadParent;
+  }, [threadParent]);
+
+  const refetchCurrentMessages = useCallback(async () => {
+    try {
+      if (channelId) {
+        const { messages: list } = await api(`/messages/channel/${channelId}/messages`);
+        setMessages(list);
+      } else if (conversationId) {
+        const { messages: list } = await api(`/messages/conversation/${conversationId}/messages`);
+        setMessages(list);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [channelId, conversationId]);
+
+  const mergeIncomingMessage = useCallback((msg) => {
+    if (!msg?.id) return;
+    if (msg.threadParentId) {
+      const openId = threadParentRef.current?.id;
+      if (openId && msg.threadParentId === openId) {
+        setThreadReplies((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      }
+      return;
+    }
+    if (msg.channelId && msg.channelId === channelId) {
+      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      return;
+    }
+    if (msg.conversationId && msg.conversationId === conversationId) {
+      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+    }
+  }, [channelId, conversationId]);
 
   useEffect(() => {
     refetchWorkspaces().catch(console.error);
@@ -209,6 +250,42 @@ export default function Workspace() {
   }, [searchParams, refetchWorkspaces, setSearchParams]);
 
   useEffect(() => {
+    const st = location.state;
+    if (!st?.openDmWith) return;
+    const uid = st.openDmWith;
+    const targetWs = st.workspaceId;
+    if (targetWs && targetWs !== workspaceId) {
+      setWorkspaceId(targetWs);
+      return;
+    }
+    if (!workspaceId || !uid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { conversation } = await api(`/conversations/workspace/${workspaceId}/conversations`, {
+          method: 'POST',
+          body: { otherUserId: uid },
+        });
+        if (cancelled) return;
+        setShowDm(false);
+        setChannelId(null);
+        setConversationId(conversation.id);
+        setDmPeer(conversation.otherUser);
+        setGroupConv(null);
+        const { conversations: convs } = await api(`/conversations/workspace/${workspaceId}/conversations`);
+        setConversations(convs);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) navigate('.', { replace: true, state: {} });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.state, workspaceId, navigate]);
+
+  useEffect(() => {
     if (!workspaceId) return;
     (async () => {
       const [ch, conv, mem] = await Promise.all([
@@ -257,7 +334,7 @@ export default function Workspace() {
       api(`/workspaces/${workspaceId}/search?q=${enc}&type=people`)
         .then((d) => setPeopleSearchResults(d.results || []))
         .catch(console.error);
-    }, 350);
+    }, 200);
     return () => clearTimeout(t);
   }, [searchQ, workspaceId, searchTab, searchFromUserId]);
 
@@ -315,19 +392,7 @@ export default function Workspace() {
   useEffect(() => {
     if (!socket || !connected) return undefined;
     const onRecv = (msg) => {
-      if (msg.threadParentId) {
-        setThreadReplies((prev) => {
-          if (threadParent && threadParent.id === msg.threadParentId) return [...prev, msg];
-          return prev;
-        });
-        return;
-      }
-      if (msg.channelId && msg.channelId === channelId) {
-        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-      }
-      if (msg.conversationId && msg.conversationId === conversationId) {
-        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-      }
+      mergeIncomingMessage(msg);
     };
     const onUpd = (msg) => {
       const patch = (list) => list.map((m) => (m.id === msg.id ? msg : m));
@@ -351,7 +416,8 @@ export default function Workspace() {
       }
     };
     const onNotify = (n) => {
-      loadNotifications().catch(() => {});
+      clearTimeout(notifDebounceRef.current);
+      notifDebounceRef.current = setTimeout(() => loadNotifications().catch(() => {}), 200);
       if (n.type === 'dm' || n.type === 'mention') {
         const showPreview = readMessagePreviewInNotif();
         const text =
@@ -376,7 +442,28 @@ export default function Workspace() {
       socket.off('typing', onTyping);
       socket.off('notification', onNotify);
     };
-  }, [socket, connected, channelId, conversationId, user.id, threadParent, loadNotifications]);
+  }, [socket, connected, channelId, conversationId, user.id, mergeIncomingMessage, loadNotifications]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onReconnect = () => {
+      refetchCurrentMessages();
+    };
+    socket.on('reconnect', onReconnect);
+    return () => socket.off('reconnect', onReconnect);
+  }, [socket, refetchCurrentMessages]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastVisibilityRefetchAt.current < 1200) return;
+      lastVisibilityRefetchAt.current = now;
+      refetchCurrentMessages();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [refetchCurrentMessages]);
 
   useEffect(() => {
     stickToBottomRef.current = true;
@@ -390,7 +477,7 @@ export default function Workspace() {
     }
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (stickToBottomRef.current || dist < 100) {
-      messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
+      messagesEnd.current?.scrollIntoView({ behavior: 'auto' });
     }
   }, [messages, threadReplies]);
 
@@ -534,7 +621,8 @@ export default function Workspace() {
     } else return;
 
     socket.emit('send_message', payload, (res) => {
-      if (!res?.ok) console.error(res?.error);
+      if (res?.ok && res.message) mergeIncomingMessage(res.message);
+      else if (!res?.ok) console.error(res?.error);
     });
     setInput('');
     if (draftKey) {
@@ -579,7 +667,8 @@ export default function Workspace() {
       if (threadParent) payload.threadParentId = threadParent.id;
     } else return;
     socket.emit('send_message', payload, (res) => {
-      if (!res?.ok) console.error(res?.error);
+      if (res?.ok && res.message) mergeIncomingMessage(res.message);
+      else if (!res?.ok) console.error(res?.error);
     });
   }
 
@@ -958,8 +1047,8 @@ export default function Workspace() {
                   type="button"
                   className="flex w-full items-center gap-2 truncate rounded px-2 py-1.5 text-left text-[#d1d2d3] hover:bg-white/10"
                   onClick={() => {
-                    if (r.id === user.id) return;
-                    openDm(r.id);
+                    if (!workspaceId) return;
+                    navigate(`/profile/${r.id}?ws=${workspaceId}`);
                     setSearchQ('');
                     setPeopleSearchResults([]);
                   }}
@@ -1035,6 +1124,15 @@ export default function Workspace() {
                       : 'ring-2 ring-[#3f0e40] dark:ring-slate-950'
                   }
                 />
+              ) : workspaceId ? (
+                <Link
+                  to={`/profile/${cv.otherUser.id}?ws=${workspaceId}`}
+                  className="shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                  title="View profile"
+                >
+                  <Avatar user={cv.otherUser} size={8} />
+                </Link>
               ) : (
                 <Avatar user={cv.otherUser} size={8} />
               )}
@@ -1119,11 +1217,14 @@ export default function Workspace() {
                   />
                   <h1 className="min-w-0 truncate text-base font-bold leading-tight sm:text-lg">{headerTitle}</h1>
                 </>
-              ) : conversationId && dmPeer ? (
-                <>
+              ) : conversationId && dmPeer && workspaceId ? (
+                <Link
+                  to={`/profile/${dmPeer.id}?ws=${workspaceId}`}
+                  className="flex min-w-0 items-center gap-2.5 rounded-lg outline-none ring-violet-500/0 transition hover:bg-slate-100/80 focus-visible:ring-2 dark:hover:bg-slate-800/80"
+                >
                   <Avatar user={dmPeer} size={9} />
                   <h1 className="min-w-0 truncate text-base font-bold leading-tight sm:text-lg">{dmPeer.name}</h1>
-                </>
+                </Link>
               ) : (
                 <h1 className="truncate text-base font-bold leading-tight sm:text-lg">{headerTitle}</h1>
               )}
@@ -1333,6 +1434,7 @@ export default function Workspace() {
                         message={m}
                         members={members}
                         selfId={user.id}
+                        workspaceId={workspaceId}
                         groupWithPrev={groupWithPrev}
                         onReaction={onReaction}
                         onThread={() => {
@@ -1354,7 +1456,7 @@ export default function Workspace() {
                 className="absolute bottom-24 right-4 z-10 rounded-full border border-violet-200/80 bg-white/95 px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-soft-lg backdrop-blur-sm transition hover:scale-[1.02] hover:border-violet-300 hover:shadow-md dark:border-violet-800/50 dark:bg-slate-800/95 dark:text-violet-300 dark:hover:bg-slate-700"
                 onClick={() => {
                   stickToBottomRef.current = true;
-                  messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
+                  messagesEnd.current?.scrollIntoView({ behavior: 'auto' });
                   setShowJumpLatest(false);
                 }}
               >
@@ -1461,12 +1563,28 @@ export default function Workspace() {
               </div>
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2">
                 <div className="rounded-lg border border-slate-200 bg-white/80 p-2 text-xs dark:border-slate-600 dark:bg-slate-900/80">
-                  <div className="flex items-center gap-2">
-                    <Avatar user={threadParent.sender} size={7} />
-                    <span className="font-semibold text-slate-700 dark:text-slate-200">
-                      {threadParent.sender?.name || 'Unknown'}
-                    </span>
-                  </div>
+                  {workspaceId && threadParent.senderId ? (
+                    <Link
+                      to={
+                        threadParent.senderId === user.id
+                          ? '/profile'
+                          : `/profile/${threadParent.senderId}?ws=${workspaceId}`
+                      }
+                      className="flex items-center gap-2 rounded-md outline-none ring-violet-500/0 transition hover:bg-slate-100/80 focus-visible:ring-2 dark:hover:bg-slate-800/50"
+                    >
+                      <Avatar user={threadParent.sender} size={7} />
+                      <span className="font-semibold text-slate-700 dark:text-slate-200">
+                        {threadParent.sender?.name || 'Unknown'}
+                      </span>
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Avatar user={threadParent.sender} size={7} />
+                      <span className="font-semibold text-slate-700 dark:text-slate-200">
+                        {threadParent.sender?.name || 'Unknown'}
+                      </span>
+                    </div>
+                  )}
                   <div className="mt-1 line-clamp-4 text-slate-600 dark:text-slate-300">
                     {threadParent.deletedAt ? <span className="italic">(deleted)</span> : threadParent.content}
                   </div>
@@ -1477,6 +1595,7 @@ export default function Workspace() {
                     message={m}
                     members={members}
                     selfId={user.id}
+                    workspaceId={workspaceId}
                     onReaction={onReaction}
                     onThread={() => {}}
                     compact
@@ -1509,7 +1628,9 @@ export default function Workspace() {
                       payload.channelId = channelId;
                       payload.alsoToChannel = Boolean(threadAlsoToChannel);
                     } else if (conversationId) payload.conversationId = conversationId;
-                    socket.emit('send_message', payload, () => {});
+                    socket.emit('send_message', payload, (res) => {
+                      if (res?.ok && res.message) mergeIncomingMessage(res.message);
+                    });
                     e.currentTarget.value = '';
                   }}
                 />
@@ -1533,10 +1654,20 @@ export default function Workspace() {
             ) : null}
             {savedList.map((m) => (
               <div key={m.id} className="rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-600">
-                <div className="flex items-center gap-2">
-                  <Avatar user={m.sender} size={7} />
-                  <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
-                </div>
+                {workspaceId && m.senderId ? (
+                  <Link
+                    to={m.senderId === user.id ? '/profile' : `/profile/${m.senderId}?ws=${workspaceId}`}
+                    className="flex items-center gap-2 rounded-md outline-none ring-violet-500/0 transition hover:bg-slate-50 focus-visible:ring-2 dark:hover:bg-slate-800/50"
+                  >
+                    <Avatar user={m.sender} size={7} />
+                    <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Avatar user={m.sender} size={7} />
+                    <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
+                  </div>
+                )}
                 <div className="mt-1 whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300">{m.content}</div>
               </div>
             ))}
@@ -1693,9 +1824,18 @@ export default function Workspace() {
                 <div key={m.id} className="flex items-center justify-between gap-2 py-1">
                   <span className="flex min-w-0 items-center gap-2">
                     <Avatar user={m} size={7} />
-                    <span className="truncate">
-                      {m.name} <span className="text-slate-500">({m.role})</span>
-                    </span>
+                    {workspaceId ? (
+                      <Link
+                        to={`/profile/${m.id}?ws=${workspaceId}`}
+                        className="truncate font-medium text-violet-700 hover:underline dark:text-violet-400"
+                      >
+                        {m.name} <span className="font-normal text-slate-500">({m.role})</span>
+                      </Link>
+                    ) : (
+                      <span className="truncate">
+                        {m.name} <span className="text-slate-500">({m.role})</span>
+                      </span>
+                    )}
                   </span>
                   {canManage && m.id !== user.id && m.role !== 'owner' ? (
                     <button
@@ -1861,6 +2001,26 @@ export default function Workspace() {
   );
 }
 
+function GroupAvatarStack({ participants, size = 8, ringClass = 'ring-2 ring-slate-200 dark:ring-slate-700' }) {
+  const list = (participants || []).filter(Boolean).slice(0, 3);
+  if (!list.length) {
+    return (
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20 text-xs font-bold ring-2 ring-white/25">
+        G
+      </span>
+    );
+  }
+  return (
+    <span className="flex shrink-0 -space-x-2">
+      {list.map((p) => (
+        <span key={p.id} className={`inline-flex rounded-full ${ringClass}`}>
+          <Avatar user={p} size={size} />
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function Modal({ title, children, onClose, wide }) {
   return (
     <div
@@ -1891,15 +2051,36 @@ function Modal({ title, children, onClose, wide }) {
   );
 }
 
-function MentionLink({ href, children }) {
+function MentionLink({ href, children, members, workspaceId, selfId }) {
   if (href?.startsWith('mention:')) {
     const id = href.slice('mention:'.length);
+    const m = (members || []).find((u) => String(u.id).toLowerCase() === id.toLowerCase());
+    const chip = (
+      <>
+        {m ? <Avatar user={m} size={6} /> : null}
+        <span className="inline-flex items-center rounded bg-violet-100 px-1 font-medium text-violet-800 dark:bg-violet-900/50 dark:text-violet-200">
+          @{children}
+        </span>
+      </>
+    );
+    if (workspaceId && id) {
+      const to =
+        selfId && String(selfId).toLowerCase() === id.toLowerCase()
+          ? '/profile'
+          : `/profile/${id}?ws=${workspaceId}`;
+      return (
+        <Link
+          to={to}
+          className="inline-flex max-w-full items-center gap-1 align-middle no-underline hover:opacity-90"
+          title={id}
+        >
+          {chip}
+        </Link>
+      );
+    }
     return (
-      <span
-        className="inline-flex items-center rounded bg-violet-100 px-1 font-medium text-violet-800 dark:bg-violet-900/50 dark:text-violet-200"
-        title={id}
-      >
-        @{children}
+      <span className="inline-flex max-w-full items-center gap-1 align-middle" title={id}>
+        {chip}
       </span>
     );
   }
@@ -1910,7 +2091,7 @@ function MentionLink({ href, children }) {
   );
 }
 
-function MessageBlock({ message, members = [], selfId, onReaction, onThread, compact, groupWithPrev }) {
+function MessageBlock({ message, members = [], selfId, workspaceId, onReaction, onThread, compact, groupWithPrev }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
 
@@ -1975,7 +2156,20 @@ function MessageBlock({ message, members = [], selfId, onReaction, onThread, com
       <div className="min-w-0 flex-1">
         {showHeader ? (
           <div className="flex flex-wrap items-baseline gap-2">
-            <span className="font-bold">{message.sender?.name || 'Unknown'}</span>
+            {workspaceId && message.senderId ? (
+              <Link
+                to={
+                  String(message.senderId) === String(selfId)
+                    ? '/profile'
+                    : `/profile/${message.senderId}?ws=${workspaceId}`
+                }
+                className="font-bold text-slate-900 hover:underline dark:text-slate-100"
+              >
+                {message.sender?.name || 'Unknown'}
+              </Link>
+            ) : (
+              <span className="font-bold">{message.sender?.name || 'Unknown'}</span>
+            )}
             <span className="text-xs text-slate-500">{formatTime(message.createdAt)}</span>
             {message.editedAt ? <span className="text-xs text-slate-400">(edited)</span> : null}
           </div>
@@ -2003,7 +2197,9 @@ function MessageBlock({ message, members = [], selfId, onReaction, onThread, com
             ) : (
               <ReactMarkdown
                 components={{
-                  a: (props) => <MentionLink {...props} members={members} />,
+                  a: (props) => (
+                    <MentionLink {...props} members={members} workspaceId={workspaceId} selfId={selfId} />
+                  ),
                 }}
               >
                 {mentionsToMarkdownLinks(message.content, members)}

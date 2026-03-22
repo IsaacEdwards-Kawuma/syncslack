@@ -61,6 +61,15 @@ export async function updateStatus(userId, statusText, statusEmoji) {
   return r.rows[0] || null;
 }
 
+export async function updateAvatarUrl(userId, avatarUrl) {
+  const r = await pool.query(
+    `UPDATE users SET avatar_url = $2, updated_at = NOW() WHERE id = $1
+     RETURNING id, email, name, avatar_url, theme, email_verified_at, status_text, status_emoji, created_at, updated_at`,
+    [userId, String(avatarUrl || '').slice(0, 500)]
+  );
+  return r.rows[0] || null;
+}
+
 export async function updatePasswordHash(userId, passwordHash) {
   await pool.query(`UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1`, [
     userId,

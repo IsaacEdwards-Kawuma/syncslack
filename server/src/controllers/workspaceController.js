@@ -1,5 +1,6 @@
 import slugify from '../utils/slugify.js';
 import * as workspaces from '../db/workspaces.js';
+import * as users from '../db/users.js';
 import * as invites from '../db/invites.js';
 import * as audit from '../db/audit.js';
 import {
@@ -74,6 +75,39 @@ export async function getWorkspace(req, res) {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Failed to load workspace' });
+  }
+}
+
+/** Public-ish profile for a workspace member (only if requester is in the same workspace). */
+export async function getMemberProfile(req, res) {
+  try {
+    const { workspaceId, memberUserId } = req.params;
+    if (!isValidUuid(workspaceId) || !isValidUuid(memberUserId)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    if (!(await workspaces.isMember(workspaceId, req.user.sub))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+    if (!(await workspaces.isMember(workspaceId, memberUserId))) {
+      return res.status(404).json({ error: 'User is not in this workspace' });
+    }
+    const row = await users.findUserById(memberUserId);
+    if (!row) return res.status(404).json({ error: 'User not found' });
+    const role = await workspaces.getMemberRole(workspaceId, memberUserId);
+    return res.json({
+      profile: {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        avatarUrl: row.avatar_url || '',
+        statusText: row.status_text ?? '',
+        statusEmoji: row.status_emoji ?? '',
+        role: role || 'member',
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to load profile' });
   }
 }
 

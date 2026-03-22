@@ -63,6 +63,7 @@ export default function App() {
           <Route index element={<SocketProvider><Workspace /></SocketProvider>} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="profile/:userId" element={<ProfilePage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Route>

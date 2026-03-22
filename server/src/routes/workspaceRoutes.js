@@ -3,6 +3,7 @@ import {
   createWorkspace,
   listMyWorkspaces,
   getWorkspace,
+  getMemberProfile,
   joinWorkspace,
   joinByInvite,
   createWorkspaceInvite,
@@ -28,6 +29,7 @@ r.post('/:workspaceId/invites', createWorkspaceInvite);
 r.get('/:workspaceId/audit', listWorkspaceAudit);
 r.patch('/:workspaceId/members/:memberUserId', updateWorkspaceMember);
 r.delete('/:workspaceId/members/:memberUserId', removeWorkspaceMember);
+r.get('/:workspaceId/members/:memberUserId/profile', getMemberProfile);
 r.get('/:workspaceId', getWorkspace);
 
 export default r;

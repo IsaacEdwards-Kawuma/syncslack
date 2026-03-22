@@ -26,7 +26,12 @@ export function SocketProvider({ children }) {
     const opts = {
       path: '/socket.io',
       auth: { token },
+      /** Prefer WebSocket immediately — lower latency than HTTP long-polling upgrade. */
       transports: ['websocket', 'polling'],
+      upgrade: true,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 8000,
+      timeout: 20000,
     };
     const s = base ? io(base, opts) : io(opts);
 
