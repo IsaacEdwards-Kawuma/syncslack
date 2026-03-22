@@ -15,6 +15,51 @@ function formatTime(d) {
   return x.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function dayKey(d) {
+  if (!d) return '';
+  const x = new Date(d);
+  return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+}
+
+function formatDayLabel(d) {
+  if (!d) return '';
+  const t = new Date(d);
+  const start = (x) => {
+    const n = new Date(x);
+    n.setHours(0, 0, 0, 0);
+    return n;
+  };
+  const today = start(Date.now());
+  const td = start(t);
+  const diffDays = Math.round((today - td) / 864e5);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return t.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: t.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
+  });
+}
+
+function withinMinutes(a, b, mins) {
+  if (!a || !b) return false;
+  return Math.abs(new Date(a) - new Date(b)) / 60000 <= mins;
+}
+
+function DayDivider({ label }) {
+  return (
+    <div className="relative my-5 flex items-center justify-center">
+      <div className="absolute inset-0 flex items-center px-4">
+        <div className="h-px w-full bg-slate-200 dark:bg-slate-600" />
+      </div>
+      <span className="relative rounded-full bg-white px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-sm dark:bg-slate-900 dark:text-slate-400">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export default function Workspace() {
   const { user, logout, setTheme } = useAuth();
   const { socket, connected } = useSocket();
@@ -72,7 +117,10 @@ export default function Workspace() {
   const [newChType, setNewChType] = useState('public');
 
   const messagesEnd = useRef(null);
+  const messagesScrollRef = useRef(null);
+  const stickToBottomRef = useRef(true);
   const fileRef = useRef(null);
+  const [showJumpLatest, setShowJumpLatest] = useState(false);
 
   const refetchWorkspaces = useCallback(async () => {
     const { workspaces: list } = await api('/workspaces');
@@ -257,8 +305,33 @@ export default function Workspace() {
   }, [socket, connected, channelId, conversationId, user.id, threadParent, loadNotifications]);
 
   useEffect(() => {
-    messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
+    stickToBottomRef.current = true;
+  }, [channelId, conversationId]);
+
+  useEffect(() => {
+    const el = messagesScrollRef.current;
+    if (!el) {
+      messagesEnd.current?.scrollIntoView({ behavior: 'auto' });
+      return;
+    }
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (stickToBottomRef.current || dist < 100) {
+      messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, threadReplies]);
+
+  useEffect(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return undefined;
+    const onScroll = () => {
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stickToBottomRef.current = dist < 80;
+      setShowJumpLatest(dist > 140);
+    };
+    onScroll();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [channelId, conversationId, messages.length]);
 
   useEffect(() => {
     if (!socket || !connected || !channelId) return undefined;
@@ -798,8 +871,15 @@ export default function Workspace() {
 
       {/* Main chat */}
       <main className="flex min-w-0 flex-1 flex-col bg-white dark:bg-slate-900">
-        <header className="relative flex h-14 shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 px-4 dark:border-slate-700">
-          <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{headerTitle}</h1>
+        <header className="relative flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2 dark:border-slate-700">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-bold leading-tight">{headerTitle}</h1>
+            {workspaceId && members.length > 0 ? (
+              <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400" title="People in this workspace">
+                {members.length} member{members.length !== 1 ? 's' : ''} in this workspace
+              </p>
+            ) : null}
+          </div>
           {groupConv && conversationId ? (
             <button
               type="button"
@@ -900,27 +980,70 @@ export default function Workspace() {
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="flex-1 space-y-3 overflow-y-auto px-6 py-4">
-              {messages.map((m) => (
-                <MessageBlock
-                  key={m.id}
-                  message={m}
-                  selfId={user.id}
-                  onReaction={onReaction}
-                  onThread={() => {
-                    setThreadParent(m);
-                    if (m.channelId) setChannelId(m.channelId);
-                    if (m.conversationId) setConversationId(m.conversationId);
-                  }}
-                />
-              ))}
+          <div className="relative flex min-w-0 flex-1 flex-col">
+            <div
+              ref={messagesScrollRef}
+              className="flex-1 space-y-0 overflow-y-auto px-4 py-3 sm:px-6"
+            >
+              {!channelId && !conversationId ? (
+                <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 text-center text-slate-500 dark:text-slate-400">
+                  <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">Welcome to Sync Work</p>
+                  <p className="max-w-sm text-sm">Pick a channel or direct message in the sidebar to start chatting.</p>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 text-center text-slate-500 dark:text-slate-400">
+                  <p className="text-base font-medium text-slate-700 dark:text-slate-200">No messages yet</p>
+                  <p className="max-w-sm text-sm">Say hello below — supports Markdown, uploads, and @mentions.</p>
+                </div>
+              ) : (
+                messages.map((m, i) => {
+                  const prev = i > 0 ? messages[i - 1] : null;
+                  const showDay = !prev || dayKey(prev.createdAt) !== dayKey(m.createdAt);
+                  const groupWithPrev = Boolean(
+                    prev &&
+                      !m.threadParentId &&
+                      !prev.threadParentId &&
+                      prev.senderId === m.senderId &&
+                      withinMinutes(prev.createdAt, m.createdAt, 6)
+                  );
+                  return (
+                    <div key={m.id}>
+                      {showDay ? <DayDivider label={formatDayLabel(m.createdAt)} /> : null}
+                      <MessageBlock
+                        message={m}
+                        selfId={user.id}
+                        groupWithPrev={groupWithPrev}
+                        onReaction={onReaction}
+                        onThread={() => {
+                          setThreadParent(m);
+                          if (m.channelId) setChannelId(m.channelId);
+                          if (m.conversationId) setConversationId(m.conversationId);
+                        }}
+                      />
+                    </div>
+                  );
+                })
+              )}
               <div ref={messagesEnd} />
             </div>
 
+            {showJumpLatest && (channelId || conversationId) && messages.length > 0 ? (
+              <button
+                type="button"
+                className="absolute bottom-24 right-4 z-10 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-md hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-violet-300 dark:hover:bg-slate-700"
+                onClick={() => {
+                  stickToBottomRef.current = true;
+                  messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
+                  setShowJumpLatest(false);
+                }}
+              >
+                ↓ New messages
+              </button>
+            ) : null}
+
             <div className="border-t border-slate-200 p-4 dark:border-slate-700">
               <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
-              <div className="flex gap-2">
+              <div className="flex items-end gap-2">
                 <button
                   type="button"
                   className="rounded border border-slate-200 px-2 py-2 text-sm dark:border-slate-600"
@@ -958,7 +1081,7 @@ export default function Workspace() {
                         ))}
                     </div>
                   ) : null}
-                  <input
+                  <textarea
                     value={input}
                     onChange={onInputChange}
                     onKeyDown={(e) => {
@@ -967,36 +1090,58 @@ export default function Workspace() {
                         sendMessage();
                       }
                     }}
+                    rows={1}
                     placeholder={
                       channelId || conversationId
-                        ? `Message ${channelId ? 'the channel' : groupConv?.title || dmPeer?.name || 'group'} — @ inserts mention`
+                        ? `Message ${channelId ? 'the channel' : groupConv?.title || dmPeer?.name || 'group'} — @ for mention`
                         : 'Select a channel'
                     }
                     disabled={!channelId && !conversationId}
-                    className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                    className="min-h-[44px] max-h-36 min-w-0 flex-1 resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => sendMessage()}
                   disabled={!channelId && !conversationId}
-                  className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-600 disabled:opacity-50"
+                  className="self-end rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-600 disabled:opacity-50"
                 >
                   Send
                 </button>
               </div>
+              {channelId || conversationId ? (
+                <p className="mt-2 text-center text-[10px] text-slate-400 dark:text-slate-500">
+                  <strong className="font-medium text-slate-500 dark:text-slate-400">Enter</strong> to send ·{' '}
+                  <strong className="font-medium text-slate-500 dark:text-slate-400">Shift+Enter</strong> new line · Markdown
+                  supported
+                </p>
+              ) : null}
             </div>
           </div>
 
           {threadParent && (channelId || conversationId) ? (
-            <aside className="w-80 shrink-0 border-l border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950">
-              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-700">
-                <span className="text-sm font-semibold">Thread</span>
-                <button type="button" className="text-slate-500 hover:text-slate-800" onClick={() => setThreadParent(null)}>
+            <aside className="flex h-full min-h-0 w-[min(100%,20rem)] shrink-0 flex-col border-l border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950 sm:w-80">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2.5 dark:border-slate-700">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">Thread</div>
+                  <div className="truncate text-xs text-slate-500 dark:text-slate-400">Reply in this side panel</div>
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:hover:bg-slate-800"
+                  onClick={() => setThreadParent(null)}
+                  aria-label="Close thread"
+                >
                   ✕
                 </button>
               </div>
-              <div className="max-h-[40vh] space-y-2 overflow-y-auto px-3 py-2">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2">
+                <div className="rounded-lg border border-slate-200 bg-white/80 p-2 text-xs dark:border-slate-600 dark:bg-slate-900/80">
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">{threadParent.sender?.name}</span>
+                  <div className="mt-1 line-clamp-4 text-slate-600 dark:text-slate-300">
+                    {threadParent.deletedAt ? <span className="italic">(deleted)</span> : threadParent.content}
+                  </div>
+                </div>
                 {threadReplies.map((m) => (
                   <MessageBlock
                     key={m.id}
@@ -1008,12 +1153,13 @@ export default function Workspace() {
                   />
                 ))}
               </div>
-              <div className="border-t border-slate-200 p-2 dark:border-slate-700">
-                <input
-                  className="w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-                  placeholder="Reply…"
+              <div className="shrink-0 border-t border-slate-200 p-2 dark:border-slate-700">
+                <textarea
+                  rows={2}
+                  className="w-full resize-y rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+                  placeholder="Reply… (Enter to send, Shift+Enter newline)"
                   onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return;
+                    if (e.key !== 'Enter' || e.shiftKey) return;
                     e.preventDefault();
                     const text = e.currentTarget.value.trim();
                     if (!text || !socket) return;
@@ -1363,9 +1509,17 @@ function Modal({ title, children, onClose, wide }) {
   );
 }
 
-function MessageBlock({ message, selfId, onReaction, onThread, compact }) {
+function MessageBlock({ message, selfId, onReaction, onThread, compact, groupWithPrev }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
+
+  async function copyText() {
+    try {
+      await navigator.clipboard.writeText(message.content || '');
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function saveEdit() {
     try {
@@ -1386,18 +1540,31 @@ function MessageBlock({ message, selfId, onReaction, onThread, compact }) {
   }
 
   const mine = message.senderId === selfId;
+  const showHeader = compact || !groupWithPrev;
 
   return (
-    <div className={`group flex gap-3 rounded-lg px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/80 ${compact ? 'text-sm' : ''}`}>
-      <Avatar user={message.sender} size={compact ? 8 : 9} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <span className="font-bold">{message.sender?.name || 'Unknown'}</span>
-          <span className="text-xs text-slate-500">{formatTime(message.createdAt)}</span>
-          {message.editedAt ? <span className="text-xs text-slate-400">(edited)</span> : null}
+    <div
+      className={`group flex gap-3 rounded-lg px-2 ${groupWithPrev && !compact ? '-mt-0.5 py-0' : 'py-1'} hover:bg-slate-50 dark:hover:bg-slate-800/80 ${compact ? 'text-sm' : ''}`}
+    >
+      {showHeader ? (
+        <Avatar user={message.sender} size={compact ? 8 : 9} />
+      ) : (
+        <div className="flex w-9 shrink-0 justify-end pt-1">
+          <span className="text-[10px] tabular-nums text-slate-400 opacity-0 transition group-hover:opacity-100">
+            {new Date(message.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+          </span>
         </div>
+      )}
+      <div className="min-w-0 flex-1">
+        {showHeader ? (
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="font-bold">{message.sender?.name || 'Unknown'}</span>
+            <span className="text-xs text-slate-500">{formatTime(message.createdAt)}</span>
+            {message.editedAt ? <span className="text-xs text-slate-400">(edited)</span> : null}
+          </div>
+        ) : null}
         {editing ? (
-          <div className="mt-1 flex gap-2">
+          <div className={`${showHeader ? 'mt-1' : 'mt-0'} flex gap-2`}>
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -1411,7 +1578,9 @@ function MessageBlock({ message, selfId, onReaction, onThread, compact }) {
             </button>
           </div>
         ) : (
-          <div className="mt-0.5 max-w-none break-words text-sm [&_a]:text-violet-600 [&_code]:rounded [&_code]:bg-slate-100 dark:[&_code]:bg-slate-800">
+          <div
+            className={`${showHeader ? 'mt-0.5' : 'mt-0'} max-w-none break-words text-sm [&_a]:text-violet-600 [&_code]:rounded [&_code]:bg-slate-100 dark:[&_code]:bg-slate-800`}
+          >
             {message.deletedAt ? (
               <span className="italic text-slate-400">{message.content}</span>
             ) : (
@@ -1449,6 +1618,11 @@ function MessageBlock({ message, selfId, onReaction, onThread, compact }) {
           {(message.channelId || message.conversationId) && !message.threadParentId ? (
             <button type="button" className="text-xs text-violet-600 hover:underline" onClick={onThread}>
               Thread
+            </button>
+          ) : null}
+          {!message.deletedAt && message.content ? (
+            <button type="button" className="text-xs text-slate-500 hover:underline" onClick={copyText}>
+              Copy
             </button>
           ) : null}
           {mine && !message.deletedAt ? (
