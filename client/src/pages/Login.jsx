@@ -80,6 +80,15 @@ export default function Login() {
             Create one
           </Link>
         </p>
+        <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-500">
+          <Link to="/help" className="hover:underline">
+            Help
+          </Link>
+          {' · '}
+          <Link to="/privacy" className="hover:underline">
+            Privacy
+          </Link>
+        </p>
       </div>
     </div>
   );

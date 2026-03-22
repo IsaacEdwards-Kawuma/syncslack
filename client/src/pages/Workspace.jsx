@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
@@ -16,6 +16,7 @@ function formatTime(d) {
 
 export default function Workspace() {
   const { user, logout, setTheme } = useAuth();
+  const navigate = useNavigate();
   const { socket, connected } = useSocket();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -43,9 +44,6 @@ export default function Workspace() {
   const [searchTab, setSearchTab] = useState('messages');
   const [channelSearchResults, setChannelSearchResults] = useState([]);
   const [peopleSearchResults, setPeopleSearchResults] = useState([]);
-  const [showSettings, setShowSettings] = useState(false);
-  const [pwdCurrent, setPwdCurrent] = useState('');
-  const [pwdNew, setPwdNew] = useState('');
   const [showCall, setShowCall] = useState(false);
   const [auditRows, setAuditRows] = useState([]);
   const [transferUserId, setTransferUserId] = useState('');
@@ -655,9 +653,20 @@ export default function Workspace() {
             <Avatar user={user} size={8} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-white">{user?.name}</div>
-              <button type="button" className="text-xs text-[#b39fb3] hover:underline" onClick={logout}>
-                Sign out
-              </button>
+              <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs">
+                <Link to="/profile" className="text-[#b39fb3] hover:underline">
+                  Profile
+                </Link>
+                <Link to="/settings" className="text-[#b39fb3] hover:underline">
+                  Settings
+                </Link>
+                <Link to="/help" className="text-[#b39fb3] hover:underline">
+                  Help
+                </Link>
+                <button type="button" className="text-[#b39fb3] hover:underline" onClick={logout}>
+                  Sign out
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -797,7 +806,8 @@ export default function Workspace() {
           <button
             type="button"
             className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-            onClick={() => setShowSettings(true)}
+            title="Settings"
+            onClick={() => navigate('/settings')}
           >
             ⚙️
           </button>
@@ -1254,83 +1264,6 @@ export default function Workspace() {
             className="h-[min(70vh,420px)] w-full rounded-lg border border-slate-200 bg-black dark:border-slate-600"
             allow="camera; microphone; display-capture; autoplay"
           />
-        </Modal>
-      ) : null}
-
-      {showSettings ? (
-        <Modal
-          title="Account & workspace"
-          onClose={() => {
-            setShowSettings(false);
-            setPwdCurrent('');
-            setPwdNew('');
-          }}
-        >
-          <form
-            className="space-y-3"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                await api('/auth/change-password', {
-                  method: 'POST',
-                  body: { currentPassword: pwdCurrent, newPassword: pwdNew },
-                });
-                setPwdCurrent('');
-                setPwdNew('');
-                setToast({ text: 'Password updated' });
-                setTimeout(() => setToast(null), 4000);
-              } catch (err) {
-                setToast({ text: err.message || 'Could not change password' });
-                setTimeout(() => setToast(null), 5000);
-              }
-            }}
-          >
-            <div className="text-sm font-semibold">Change password</div>
-            <input
-              type="password"
-              value={pwdCurrent}
-              onChange={(e) => setPwdCurrent(e.target.value)}
-              className="w-full rounded border border-slate-200 px-3 py-2 dark:border-slate-600 dark:bg-slate-800"
-              placeholder="Current password"
-              autoComplete="current-password"
-            />
-            <input
-              type="password"
-              value={pwdNew}
-              onChange={(e) => setPwdNew(e.target.value)}
-              className="w-full rounded border border-slate-200 px-3 py-2 dark:border-slate-600 dark:bg-slate-800"
-              placeholder="New password (8+ characters)"
-              autoComplete="new-password"
-            />
-            <button type="submit" className="w-full rounded bg-violet-700 py-2 text-white">
-              Update password
-            </button>
-          </form>
-          {workspaceId && myRole !== 'owner' ? (
-            <button
-              type="button"
-              className="mt-4 w-full rounded border border-red-300 py-2 text-red-700 dark:border-red-800 dark:text-red-400"
-              onClick={async () => {
-                if (!confirm('Leave this workspace? You will need an invite to rejoin.')) return;
-                try {
-                  await api(`/workspaces/${workspaceId}/leave`, { method: 'POST' });
-                  setShowSettings(false);
-                  await refetchWorkspaces();
-                } catch (e) {
-                  console.error(e);
-                  setToast({ text: e.message || 'Could not leave' });
-                  setTimeout(() => setToast(null), 4000);
-                }
-              }}
-            >
-              Leave workspace
-            </button>
-          ) : null}
-          {myRole === 'owner' ? (
-            <p className="mt-3 text-xs text-slate-500">
-              To leave the workspace, transfer ownership in Admin first, then leave from here if you are no longer owner.
-            </p>
-          ) : null}
         </Modal>
       ) : null}
 
