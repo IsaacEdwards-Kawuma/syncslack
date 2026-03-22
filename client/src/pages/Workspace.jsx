@@ -96,6 +96,7 @@ export default function Workspace() {
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [addGroupPick, setAddGroupPick] = useState(() => new Set());
   const [showMention, setShowMention] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -141,6 +142,37 @@ export default function Workspace() {
   useEffect(() => {
     loadNotifications().catch(console.error);
   }, [loadNotifications]);
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [channelId, conversationId, workspaceId]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    function onKey(e) {
+      if (e.key === 'Escape') setMobileSidebarOpen(false);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileSidebarOpen]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    function onMq() {
+      if (mq.matches) setMobileSidebarOpen(false);
+    }
+    mq.addEventListener('change', onMq);
+    return () => mq.removeEventListener('change', onMq);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileSidebarOpen]);
 
   useEffect(() => {
     const inv = searchParams.get('invite');
@@ -569,9 +601,9 @@ export default function Workspace() {
 
   if (!workspaces.length) {
     return (
-      <div className="flex min-h-full flex-col items-center justify-center gap-4 bg-slate-50 p-8 dark:bg-slate-900">
-        <p className="text-lg text-slate-600 dark:text-slate-300">Create or join a workspace to get started.</p>
-        <div className="flex gap-2">
+        <div className="flex min-h-full flex-col items-center justify-center gap-4 bg-slate-50 p-6 dark:bg-slate-900 sm:p-8">
+        <p className="text-center text-lg text-slate-600 dark:text-slate-300">Create or join a workspace to get started.</p>
+        <div className="flex w-full max-w-sm flex-col gap-2 sm:w-auto sm:flex-row">
           <button
             type="button"
             className="rounded-lg bg-violet-700 px-4 py-2 font-semibold text-white"
@@ -627,9 +659,19 @@ export default function Workspace() {
   }
 
   return (
-    <div className="flex h-full min-h-0 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+    <div className="flex h-full min-h-0 overflow-hidden bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+      {mobileSidebarOpen ? (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          aria-hidden
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      ) : null}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 flex h-full shrink-0 md:static md:z-auto md:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-200 ease-out md:translate-x-0`}
+      >
       {/* Workspace rail */}
-      <aside className="flex w-16 flex-col items-center gap-2 border-r border-[#522653] bg-[#3f0e40] py-3 dark:border-slate-700">
+      <aside className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-[#522653] bg-[#3f0e40] py-3 dark:border-slate-700">
         {workspaces.map((w) => (
           <button
             key={w.id}
@@ -670,7 +712,7 @@ export default function Workspace() {
       </aside>
 
       {/* Channels + DMs */}
-      <aside className="flex w-64 flex-col border-r border-[#522653] bg-[#3f0e40] text-[#d1d2d3] dark:border-slate-700 dark:bg-slate-950">
+      <aside className="flex w-[min(16rem,calc(100vw-4rem))] shrink-0 flex-col border-r border-[#522653] bg-[#3f0e40] text-[#d1d2d3] dark:border-slate-700 dark:bg-slate-950 md:w-64">
         <div className="border-b border-[#522653] px-3 py-3 dark:border-slate-700">
           <div className="flex items-center justify-between gap-2">
             <div className="truncate font-bold text-white">{activeWorkspace?.name || 'Workspace'}</div>
@@ -895,12 +937,21 @@ export default function Workspace() {
           </div>
         </div>
       </aside>
+      </div>
 
       {/* Main chat */}
-      <main className="flex min-w-0 flex-1 flex-col bg-white dark:bg-slate-900">
-        <header className="relative flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2 dark:border-slate-700">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-white dark:bg-slate-900">
+        <header className="relative flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2 sm:px-4 dark:border-slate-700">
+          <button
+            type="button"
+            className="-ml-0.5 shrink-0 rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 md:hidden"
+            onClick={() => setMobileSidebarOpen(true)}
+            aria-label="Open channels menu"
+          >
+            ☰
+          </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-bold leading-tight">{headerTitle}</h1>
+            <h1 className="truncate text-base font-bold leading-tight sm:text-lg">{headerTitle}</h1>
             {workspaceId && members.length > 0 ? (
               <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400" title="People in this workspace">
                 {members.length} member{members.length !== 1 ? 's' : ''} in this workspace
@@ -942,7 +993,7 @@ export default function Workspace() {
               🔔 {notifications.filter((n) => !n.readAt).length || ''}
             </button>
             {showNotif ? (
-              <div className="absolute right-0 top-10 z-50 max-h-72 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-xl dark:border-slate-600 dark:bg-slate-800">
+              <div className="absolute right-0 top-10 z-50 max-h-[min(18rem,70vh)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-xl dark:border-slate-600 dark:bg-slate-800 sm:w-80">
                 <button
                   type="button"
                   className="mb-2 text-violet-600 hover:underline"
@@ -1006,8 +1057,8 @@ export default function Workspace() {
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1">
-          <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <div
               ref={messagesScrollRef}
               className="flex-1 space-y-0 overflow-y-auto px-4 py-3 sm:px-6"
@@ -1069,12 +1120,12 @@ export default function Workspace() {
               </button>
             ) : null}
 
-            <div className="border-t border-slate-200 p-4 dark:border-slate-700">
+            <div className="border-t border-slate-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-700 sm:p-4">
               <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-1.5 sm:gap-2">
                 <button
                   type="button"
-                  className="rounded border border-slate-200 px-2 py-2 text-sm dark:border-slate-600"
+                  className="shrink-0 rounded border border-slate-200 px-2 py-2 text-sm dark:border-slate-600"
                   onClick={() => fileRef.current?.click()}
                 >
                   📎
@@ -1090,7 +1141,7 @@ export default function Workspace() {
                     @
                   </button>
                   {showMentionPicker ? (
-                    <div className="absolute bottom-full left-0 z-30 mb-1 max-h-48 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-600 dark:bg-slate-800">
+                    <div className="absolute bottom-full left-0 z-30 mb-1 max-h-48 w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-600 dark:bg-slate-800">
                       {mentionMembers.length === 0 ? (
                         <div className="px-3 py-2 text-slate-500">No matching people</div>
                       ) : (
@@ -1134,7 +1185,7 @@ export default function Workspace() {
                   type="button"
                   onClick={() => sendMessage()}
                   disabled={!channelId && !conversationId}
-                  className="self-end rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-600 disabled:opacity-50"
+                  className="shrink-0 self-end rounded-lg bg-violet-700 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-600 disabled:opacity-50 sm:px-4"
                 >
                   Send
                 </button>
@@ -1150,7 +1201,7 @@ export default function Workspace() {
           </div>
 
           {threadParent && (channelId || conversationId) ? (
-            <aside className="flex h-full min-h-0 w-[min(100%,20rem)] shrink-0 flex-col border-l border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950 sm:w-80">
+            <aside className="fixed inset-0 z-[60] flex min-h-0 flex-col bg-slate-50 dark:bg-slate-950 lg:static lg:inset-auto lg:z-auto lg:h-full lg:w-[min(100%,20rem)] lg:max-w-[20rem] lg:shrink-0 lg:border-l lg:border-slate-200 dark:lg:border-slate-700">
               <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2.5 dark:border-slate-700">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold">Thread</div>
@@ -1208,7 +1259,7 @@ export default function Workspace() {
       </main>
 
       {toast ? (
-        <div className="fixed bottom-6 right-6 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white shadow-lg">
+        <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1.5rem,env(safe-area-inset-right))] z-[90] max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-4 py-2 text-sm text-white shadow-lg">
           {toast.text}
         </div>
       ) : null}
@@ -1450,7 +1501,7 @@ export default function Workspace() {
           <iframe
             title="Jitsi call"
             src={`https://meet.jit.si/syncwork-${workspaceId}-${channelId || conversationId || 'lobby'}#config.prejoinPageEnabled=false`}
-            className="h-[min(70vh,420px)] w-full rounded-lg border border-slate-200 bg-black dark:border-slate-600"
+            className="h-[min(50vh,280px)] w-full rounded-lg border border-slate-200 bg-black sm:h-[min(70vh,420px)] dark:border-slate-600"
             allow="camera; microphone; display-capture; autoplay"
           />
         </Modal>
@@ -1524,9 +1575,9 @@ export default function Workspace() {
 
 function Modal({ title, children, onClose, wide }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
       <div
-        className={`w-full ${wide ? 'max-w-4xl' : 'max-w-md'} rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800`}
+        className={`w-full ${wide ? 'max-w-4xl' : 'max-w-md'} rounded-xl bg-white p-4 shadow-xl sm:p-6 dark:bg-slate-800`}
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>

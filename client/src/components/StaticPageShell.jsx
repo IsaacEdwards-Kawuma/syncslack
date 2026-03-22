@@ -6,7 +6,7 @@ export default function StaticPageShell({ title, children }) {
 
   return (
     <div className="min-h-full bg-slate-50 dark:bg-slate-900">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-950">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-3 py-3 dark:border-slate-700 dark:bg-slate-950 sm:px-4">
         {isAuthenticated ? (
           <Link to="/" className="text-sm font-semibold text-violet-700 hover:underline dark:text-violet-400">
             ← App
@@ -31,7 +31,7 @@ export default function StaticPageShell({ title, children }) {
           </Link>
         </nav>
       </header>
-      <main className="mx-auto max-w-2xl px-4 py-8">
+      <main className="mx-auto max-w-2xl px-3 py-6 sm:px-4 sm:py-8">
         {title ? <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{title}</h1> : null}
         {children}
       </main>
