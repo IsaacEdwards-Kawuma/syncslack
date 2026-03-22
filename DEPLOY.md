@@ -92,6 +92,8 @@ The server binds to **`0.0.0.0`** and sets **`trust proxy`** for Render’s load
 
 4. Deploy. Open the **.vercel.app** URL.
 
+**If you see `404: NOT_FOUND`:** almost always **Output Directory** or **Root Directory** is wrong. With **Root Directory = `client`**, Output must be **`dist`** (not `client/dist`). With **Root Directory empty**, Output must be **`client/dist`**. Redeploy after fixing.
+
 5. Go back to **Render** → **Environment** → set `CLIENT_ORIGIN` to include your real Vercel URL, e.g.  
    `http://localhost:5173,https://your-app.vercel.app`  
    Redeploy Render after changing env.

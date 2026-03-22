@@ -17,6 +17,21 @@ Add for **Production** (and **Preview** if you want):
 
 **No trailing slash.** Then **Save** → **Deployments** → **Redeploy**.
 
+### Vercel shows `404: NOT_FOUND` (or blank)
+
+That usually means Vercel is not serving your Vite build (wrong folder or empty output).
+
+1. **Project → Settings → General → Root Directory** → set to **`client`** (not empty, not `server`).
+2. **Settings → Build & Deployment**:
+   - **Framework Preset**: Vite (or Other)
+   - **Build Command**: `npm run build`
+   - **Output Directory**: **`dist`** — must be exactly `dist` when Root Directory is **`client`**.  
+     If Root Directory is **empty** (repo root), use **`client/dist`** instead.
+3. **Save** → **Deployments** → **Redeploy** the latest commit.
+
+**Do not** set Output to `client/dist` when Root Directory is already `client` (that looks for `client/client/dist` and fails).  
+`client/vercel.json` in the repo configures `outputDirectory: dist` for the **`client`** root.
+
 ---
 
 ## Render → Web Service (API)
