@@ -4,7 +4,9 @@
 export function getJwtSecret() {
   const s = (process.env.JWT_SECRET || '').trim();
   if (!s) {
-    throw new Error('JWT_SECRET is missing or empty. Set it in server/.env');
+    throw new Error(
+      'JWT_SECRET is missing or empty. Set it in Render → Environment (or server/.env locally).'
+    );
   }
   return s;
 }

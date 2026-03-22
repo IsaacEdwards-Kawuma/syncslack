@@ -10,7 +10,7 @@
     "build": "node -e \"console.log('build: no compile step; deps installed by Render')\""
   },
   "engines": {
-    "node": ">=18"
+    "node": "20.x"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

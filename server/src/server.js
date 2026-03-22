@@ -75,11 +75,39 @@ const io = attachSocketIO(httpServer);
 app.set('io', io);
 
 const PORT = Number(process.env.PORT) || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/syncwork';
+
+function resolveMongoUri() {
+  const fromEnv = process.env.MONGODB_URI?.trim();
+  if (fromEnv) return fromEnv;
+  /** Render sets RENDER=true; there is no local MongoDB on the host. */
+  const mustHaveAtlas = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+  if (mustHaveAtlas) {
+    console.error(
+      '[FATAL] MONGODB_URI is not set. In Render → Environment, add your MongoDB Atlas connection string (mongodb+srv://...).'
+    );
+    return null;
+  }
+  return 'mongodb://127.0.0.1:27017/syncwork';
+}
 
 async function main() {
+  const mongoUri = resolveMongoUri();
+  if (!mongoUri) {
+    process.exit(1);
+  }
+
   getJwtSecret();
-  await connectDB(MONGODB_URI);
+
+  try {
+    await connectDB(mongoUri);
+  } catch (err) {
+    console.error('[FATAL] MongoDB connection failed:', err?.message || err);
+    console.error(
+      'Check MONGODB_URI, Atlas Database Access (user/password), and Network Access (IP allowlist: 0.0.0.0/0 for testing).'
+    );
+    process.exit(1);
+  }
+
   /** Render and most PaaS require binding to 0.0.0.0, not only localhost. */
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`HTTP + Socket.IO listening on port ${PORT}`);
@@ -88,6 +116,9 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error('[FATAL]', err?.message || err);
+  if (String(err?.message || '').includes('JWT_SECRET')) {
+    console.error('Add JWT_SECRET in Render → Environment (generate a long random string).');
+  }
   process.exit(1);
 });
