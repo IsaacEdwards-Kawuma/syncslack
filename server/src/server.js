@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { connectDB } from './config/db.js';
 import { uploadsDir } from './config/uploadsPath.js';
-import { getCorsOrigins } from './config/cors.js';
+import { getCorsOrigins, isOriginAllowed } from './config/cors.js';
 import { getJwtSecret } from './config/env.js';
 import { attachSocketIO } from './socket/socketServer.js';
 
@@ -38,9 +38,7 @@ app.use(
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(null, false);
+      cb(null, isOriginAllowed(origin));
     },
     credentials: true,
   })

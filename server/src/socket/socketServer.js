@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { getCorsOrigins } from '../config/cors.js';
+import { isOriginAllowed } from '../config/cors.js';
 import { getJwtSecret } from '../config/env.js';
 import { verifyToken } from '../utils/jwt.js';
 import * as messages from '../db/messages.js';
@@ -9,10 +9,11 @@ import { formatMessageDoc } from './formatMessage.js';
 import { isValidUuid } from '../utils/ids.js';
 
 export function attachSocketIO(httpServer) {
-  const allowedOrigins = getCorsOrigins();
   const io = new Server(httpServer, {
     cors: {
-      origin: allowedOrigins,
+      origin: (origin, callback) => {
+        callback(null, isOriginAllowed(origin));
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },
