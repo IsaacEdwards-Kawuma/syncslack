@@ -6,6 +6,7 @@ import { useSocket } from '../context/SocketContext.jsx';
 import { api, getApiBaseUrl, getPublicAssetUrl, getToken } from '../lib/api.js';
 import { readMessagePreviewInNotif } from '../lib/settingsPrefs.js';
 import Avatar from '../components/Avatar.jsx';
+import { getMentionContext, mentionsToMarkdownLinks } from '../utils/mentions.js';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀'];
 
@@ -395,11 +396,37 @@ export default function Workspace() {
     else if (conversationId) socket.emit('typing', { conversationId, isTyping });
   }
 
+  const mentionCtx = useMemo(() => getMentionContext(input), [input]);
+  const mentionFilter = mentionCtx.open ? mentionCtx.filter : '';
+  const mentionMembers = useMemo(() => {
+    const f = mentionFilter;
+    return members
+      .filter((m) => m.id !== user.id)
+      .filter((m) => {
+        if (!f) return true;
+        return m.name.toLowerCase().includes(f) || String(m.id).toLowerCase().includes(f);
+      });
+  }, [members, user.id, mentionFilter]);
+
+  const showMentionPicker = (channelId || conversationId) && (showMention || mentionCtx.open);
+
   function onInputChange(e) {
     setInput(e.target.value);
     emitTyping(true);
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => emitTyping(false), 800);
+  }
+
+  function insertMention(userId) {
+    const uid = String(userId).toLowerCase();
+    setShowMention(false);
+    setInput((prev) => {
+      const ctx = getMentionContext(prev);
+      if (ctx.replaceStart >= 0) {
+        return `${prev.slice(0, ctx.replaceStart)}@${uid} ${prev.slice(ctx.replaceEnd)}`;
+      }
+      return `${prev}@${uid} `;
+    });
   }
 
   async function sendMessage(extraAttachments) {
@@ -1011,6 +1038,7 @@ export default function Workspace() {
                       {showDay ? <DayDivider label={formatDayLabel(m.createdAt)} /> : null}
                       <MessageBlock
                         message={m}
+                        members={members}
                         selfId={user.id}
                         groupWithPrev={groupWithPrev}
                         onReaction={onReaction}
@@ -1061,30 +1089,32 @@ export default function Workspace() {
                   >
                     @
                   </button>
-                  {showMention && (channelId || conversationId) ? (
+                  {showMentionPicker ? (
                     <div className="absolute bottom-full left-0 z-30 mb-1 max-h-48 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-600 dark:bg-slate-800">
-                      {members
-                        .filter((m) => m.id !== user.id)
-                        .map((m) => (
+                      {mentionMembers.length === 0 ? (
+                        <div className="px-3 py-2 text-slate-500">No matching people</div>
+                      ) : (
+                        mentionMembers.map((m) => (
                           <button
                             key={m.id}
                             type="button"
                             className="block w-full truncate px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-700"
-                            onClick={() => {
-                              const uid = String(m.id).toLowerCase();
-                              setInput((prev) => `${prev}@${uid} `);
-                              setShowMention(false);
-                            }}
+                            onClick={() => insertMention(m.id)}
                           >
                             {m.name}
                           </button>
-                        ))}
+                        ))
+                      )}
                     </div>
                   ) : null}
                   <textarea
                     value={input}
                     onChange={onInputChange}
                     onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setShowMention(false);
+                        return;
+                      }
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         sendMessage();
@@ -1146,6 +1176,7 @@ export default function Workspace() {
                   <MessageBlock
                     key={m.id}
                     message={m}
+                    members={members}
                     selfId={user.id}
                     onReaction={onReaction}
                     onThread={() => {}}
@@ -1509,7 +1540,26 @@ function Modal({ title, children, onClose, wide }) {
   );
 }
 
-function MessageBlock({ message, selfId, onReaction, onThread, compact, groupWithPrev }) {
+function MentionLink({ href, children }) {
+  if (href?.startsWith('mention:')) {
+    const id = href.slice('mention:'.length);
+    return (
+      <span
+        className="inline-flex items-center rounded bg-violet-100 px-1 font-medium text-violet-800 dark:bg-violet-900/50 dark:text-violet-200"
+        title={id}
+      >
+        @{children}
+      </span>
+    );
+  }
+  return (
+    <a href={href} className="text-violet-600 underline" target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  );
+}
+
+function MessageBlock({ message, members = [], selfId, onReaction, onThread, compact, groupWithPrev }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
 
@@ -1584,7 +1634,13 @@ function MessageBlock({ message, selfId, onReaction, onThread, compact, groupWit
             {message.deletedAt ? (
               <span className="italic text-slate-400">{message.content}</span>
             ) : (
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+              <ReactMarkdown
+                components={{
+                  a: MentionLink,
+                }}
+              >
+                {mentionsToMarkdownLinks(message.content, members)}
+              </ReactMarkdown>
             )}
           </div>
         )}

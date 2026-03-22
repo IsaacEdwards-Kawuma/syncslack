@@ -1,5 +1,9 @@
-/** Matches @uuid (v4) in message text for reliable mentions */
-const UUID_RE = /@([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})/gi;
+/**
+ * Matches @uuid (v4) in message text for reliable mentions.
+ * Use [0-9a-fA-F] so pasted uppercase UUIDs still match (JS `i` does not make character classes case-insensitive).
+ */
+const UUID_RE =
+  /@([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12})/gi;
 
 export function extractMentionedUserIds(content) {
   if (!content || typeof content !== 'string') return [];
