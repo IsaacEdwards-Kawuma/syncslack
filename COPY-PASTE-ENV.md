@@ -1,6 +1,8 @@
 # Copy-paste environment variables
 
-Your Vercel app: **https://syncsllack.vercel.app**
+Your Vercel app (frontend): **https://syncsllack.vercel.app**
+
+**API health checks must use your Render URL**, not Vercel — e.g. `https://YOUR-SERVICE.onrender.com/health` or `.../api/health`.
 
 Replace `YOUR-RENDER-URL` below with your **Render Web Service** URL (e.g. `https://sync-work-api.onrender.com`) — from Render dashboard → your API → copy URL. **No trailing slash.**
 

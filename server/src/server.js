@@ -50,6 +50,21 @@ app.use(
 );
 app.use(express.json({ limit: '2mb' }));
 
+/** Root URL — opening https://your-service.onrender.com/ shows JSON instead of 404 Not Found */
+app.get('/', (_req, res) => {
+  res.json({
+    ok: true,
+    service: 'sync-work-server',
+    health: '/api/health',
+    hint: 'API routes are under /api/...',
+  });
+});
+
+/** Shorter health URL (same as /api/health) for quick checks in browser */
+app.get('/health', (_req, res) => {
+  res.json({ ok: true, service: 'sync-work-server' });
+});
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
