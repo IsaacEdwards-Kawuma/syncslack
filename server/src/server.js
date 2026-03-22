@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,6 +11,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { connectDB } from './config/db.js';
+import { uploadsDir } from './config/uploadsPath.js';
 import { getCorsOrigins } from './config/cors.js';
 import { getJwtSecret } from './config/env.js';
 import { attachSocketIO } from './socket/socketServer.js';
@@ -22,9 +22,6 @@ import channelRoutes from './routes/channelRoutes.js';
 import conversationRoutes from './routes/conversationRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
-
-const uploadsDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const app = express();
 /** Required behind Render / other reverse proxies (rate-limit, secure cookies, req.ip). */
@@ -106,24 +103,40 @@ function resolveMongoUri() {
 }
 
 async function main() {
+  console.log('[startup] sync-work-server');
+  console.log('[startup] NODE_ENV=', process.env.NODE_ENV, 'RENDER=', process.env.RENDER);
+  console.log('[startup] MONGODB_URI is set:', Boolean(process.env.MONGODB_URI?.trim()));
+  console.log('[startup] JWT_SECRET is set:', Boolean(process.env.JWT_SECRET?.trim()));
+
   const mongoUri = resolveMongoUri();
   if (!mongoUri) {
     process.exit(1);
   }
 
-  getJwtSecret();
+  try {
+    getJwtSecret();
+  } catch (e) {
+    console.error('[FATAL]', e?.message || e);
+    console.error('Add JWT_SECRET in Render → Environment (long random string).');
+    process.exit(1);
+  }
 
   try {
     await connectDB(mongoUri);
   } catch (err) {
     console.error('[FATAL] MongoDB connection failed:', err?.message || err);
     console.error(
-      'Check MONGODB_URI, Atlas Database Access (user/password), and Network Access (IP allowlist: 0.0.0.0/0 for testing).'
+      'Check MONGODB_URI, Atlas user/password, and Network Access (allow 0.0.0.0/0 for testing).'
     );
     process.exit(1);
   }
 
   /** Render and most PaaS require binding to 0.0.0.0, not only localhost. */
+  httpServer.on('error', (err) => {
+    console.error('[FATAL] HTTP server error:', err?.message || err);
+    process.exit(1);
+  });
+
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`HTTP + Socket.IO listening on port ${PORT}`);
     console.log(`CORS origins: ${allowedOrigins.join(', ')}`);
@@ -131,7 +144,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('[FATAL]', err?.message || err);
+  console.error('[FATAL] Unhandled startup error:', err?.message || err);
   if (String(err?.message || '').includes('JWT_SECRET')) {
     console.error('Add JWT_SECRET in Render → Environment (generate a long random string).');
   }
