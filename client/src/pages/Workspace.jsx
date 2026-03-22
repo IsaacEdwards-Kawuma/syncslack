@@ -542,10 +542,17 @@ export default function Workspace() {
           +
         </button>
         <div className="flex-1" />
+        <Link
+          to="/settings"
+          title="Settings"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg text-white/80 transition hover:bg-white/10"
+        >
+          ⚙️
+        </Link>
         <button
           type="button"
           onClick={() => setTheme(dark ? 'light' : 'dark')}
-          className="text-xs text-white/70 hover:text-white"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg text-white/70 transition hover:bg-white/10 hover:text-white"
           title="Toggle theme"
         >
           {dark ? '☀️' : '🌙'}
@@ -677,18 +684,6 @@ export default function Workspace() {
               ))}
             </div>
           ) : null}
-        </div>
-
-        <div className="shrink-0 border-b border-[#522653] px-2 py-1.5 dark:border-slate-700">
-          <Link
-            to="/settings"
-            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-[#d1d2d3] hover:bg-white/10"
-          >
-            <span className="text-base leading-none" aria-hidden>
-              ⚙️
-            </span>
-            <span className="font-medium">Settings</span>
-          </Link>
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-2">
