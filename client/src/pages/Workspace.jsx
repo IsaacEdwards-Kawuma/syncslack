@@ -91,7 +91,8 @@ export default function Workspace() {
   const [searchTab, setSearchTab] = useState('messages');
   const [channelSearchResults, setChannelSearchResults] = useState([]);
   const [peopleSearchResults, setPeopleSearchResults] = useState([]);
-  const [showCall, setShowCall] = useState(false);
+  /** null | 'video' | 'audio' — Jitsi call modal */
+  const [callMode, setCallMode] = useState(null);
   const [auditRows, setAuditRows] = useState([]);
   const [transferUserId, setTransferUserId] = useState('');
   const [showAddGroup, setShowAddGroup] = useState(false);
@@ -545,6 +546,46 @@ export default function Workspace() {
     }
     setShowMention(false);
     emitTyping(false);
+  }
+
+  function buildJitsiMeetUrl(mode) {
+    if (!workspaceId) return '';
+    const tail = channelId || conversationId || 'lobby';
+    const room = `syncwork-${workspaceId}-${tail}`;
+    const params = [
+      'config.prejoinPageEnabled=false',
+      mode === 'audio' ? 'config.startWithVideoMuted=true' : 'config.startWithVideoMuted=false',
+      'config.disableChat=false',
+    ];
+    return `https://meet.jit.si/${room}#${params.join('&')}`;
+  }
+
+  function announceCallInChat(mode) {
+    if (!socket) return;
+    const url = buildJitsiMeetUrl(mode);
+    if (!url) return;
+    const label = mode === 'audio' ? 'Voice call' : 'Video call';
+    const emoji = mode === 'audio' ? '🎤' : '📹';
+    const content = `${emoji} **${label}** — [Join](${url})`;
+    const payload = { content };
+    if (channelId) {
+      payload.channelId = channelId;
+      if (threadParent) {
+        payload.threadParentId = threadParent.id;
+        payload.alsoToChannel = Boolean(threadAlsoToChannel);
+      }
+    } else if (conversationId) {
+      payload.conversationId = conversationId;
+      if (threadParent) payload.threadParentId = threadParent.id;
+    } else return;
+    socket.emit('send_message', payload, (res) => {
+      if (!res?.ok) console.error(res?.error);
+    });
+  }
+
+  function openCall(mode) {
+    setCallMode(mode);
+    announceCallInChat(mode);
   }
 
   async function onPickFile(e) {
@@ -1089,14 +1130,24 @@ export default function Workspace() {
             Saved
           </button>
           {(channelId || conversationId) && workspaceId ? (
-            <button
-              type="button"
-              className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-              title="Video call (opens Jitsi)"
-              onClick={() => setShowCall(true)}
-            >
-              Call
-            </button>
+            <div className="flex flex-wrap items-center gap-0.5">
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                title="Video call — posts a join link in this chat"
+                onClick={() => openCall('video')}
+              >
+                Video
+              </button>
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                title="Voice call (mic only, camera off) — posts a join link in this chat"
+                onClick={() => openCall('audio')}
+              >
+                Voice
+              </button>
+            </div>
           ) : null}
           <div className="relative">
             <button
@@ -1639,16 +1690,21 @@ export default function Workspace() {
         </Modal>
       ) : null}
 
-      {showCall && workspaceId ? (
-        <Modal title="Video call" wide onClose={() => setShowCall(false)}>
+      {callMode && workspaceId ? (
+        <Modal
+          title={callMode === 'audio' ? 'Voice call' : 'Video call'}
+          wide
+          onClose={() => setCallMode(null)}
+        >
           <p className="mb-2 text-xs text-slate-500">
-            Opens a Jitsi room shared with this channel or conversation. Others can join with the same room name.
+            Jitsi room for this channel or conversation. A join link was posted in the chat. Voice starts with the camera
+            off; you can turn video on in the meeting.
           </p>
           <iframe
-            title="Jitsi call"
-            src={`https://meet.jit.si/syncwork-${workspaceId}-${channelId || conversationId || 'lobby'}#config.prejoinPageEnabled=false`}
+            title={callMode === 'audio' ? 'Jitsi voice call' : 'Jitsi video call'}
+            src={buildJitsiMeetUrl(callMode)}
             className="h-[min(50vh,280px)] w-full rounded-lg border border-slate-200 bg-black sm:h-[min(70vh,420px)] dark:border-slate-600"
-            allow="camera; microphone; display-capture; autoplay"
+            allow="camera; microphone; display-capture; autoplay; fullscreen"
           />
         </Modal>
       ) : null}

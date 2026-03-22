@@ -39,8 +39,9 @@ export default function HelpPage() {
       <section className="mt-8 space-y-3 text-slate-700 dark:text-slate-300">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Calls</h2>
         <p>
-          <strong>Call</strong> opens a Jitsi Meet room tied to the current channel or conversation. Others can join with
-          the same room name from their device.
+          <strong>Video</strong> and <strong>Voice</strong> open the same Jitsi Meet room for the current channel or DM.
+          Voice starts with the camera off. A message with a join link is posted so others can follow from chat. In-meeting
+          chat is available inside Jitsi.
         </p>
       </section>
 
