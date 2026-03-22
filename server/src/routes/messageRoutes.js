@@ -8,6 +8,7 @@ import {
   toggleReaction,
   listWorkspaceMembers,
   listSavedMessages,
+  markReadHandler,
   listChannelPins,
   pinMessageHandler,
   unpinMessageHandler,
@@ -18,6 +19,7 @@ import { authMiddleware } from '../middleware/auth.js';
 
 const r = Router();
 r.use(authMiddleware);
+r.post('/mark-read', markReadHandler);
 r.get('/saved', listSavedMessages);
 r.get('/workspace/:workspaceId/members', listWorkspaceMembers);
 r.get('/channel/:channelId/pins', listChannelPins);

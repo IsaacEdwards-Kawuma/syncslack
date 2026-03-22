@@ -12,6 +12,7 @@ import { formatMessageDoc } from './formatMessage.js';
 import { isValidUuid } from '../utils/ids.js';
 import { extractMentionedUserIds } from '../utils/mentions.js';
 import * as channelPrefs from '../db/channelPrefs.js';
+import * as users from '../db/users.js';
 import { sendPushToUser } from '../services/webPush.js';
 
 const onlineByWorkspace = new Map();
@@ -314,7 +315,14 @@ export function attachSocketIO(httpServer) {
     );
 
     socket.on('typing', async ({ channelId, conversationId, isTyping }) => {
-      const payload = { userId, isTyping: !!isTyping };
+      let userName = 'Someone';
+      try {
+        const u = await users.findUserById(userId);
+        if (u?.name) userName = u.name;
+      } catch {
+        /* ignore */
+      }
+      const payload = { userId, userName, isTyping: !!isTyping };
       if (channelId) {
         const check = await assertChannelAccess(channelId, userId);
         if (check.error) return;

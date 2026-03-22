@@ -106,6 +106,14 @@ export default function Workspace() {
   const [threadAlsoToChannel, setThreadAlsoToChannel] = useState(false);
   const [showSavedModal, setShowSavedModal] = useState(false);
   const [savedList, setSavedList] = useState([]);
+  const [unreadChannels, setUnreadChannels] = useState(() => new Set());
+  const [unreadConversations, setUnreadConversations] = useState(() => new Set());
+  const [searchScope, setSearchScope] = useState('');
+  const [searchDateFrom, setSearchDateFrom] = useState('');
+  const [searchDateTo, setSearchDateTo] = useState('');
+  const [searchInFiles, setSearchInFiles] = useState(true);
+  const [pendingMessageScroll, setPendingMessageScroll] = useState(null);
+  const [composerDrag, setComposerDrag] = useState(false);
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -146,6 +154,17 @@ export default function Workspace() {
     const { notifications: n } = await api('/notifications');
     setNotifications(n || []);
   }, []);
+
+  const loadUnread = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const s = await api(`/workspaces/${workspaceId}/unread-summary`);
+      setUnreadChannels(new Set(s.unreadChannels || []));
+      setUnreadConversations(new Set(s.unreadConversations || []));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [workspaceId]);
 
   useEffect(() => {
     threadParentRef.current = threadParent;
@@ -320,7 +339,16 @@ export default function Workspace() {
           return;
         }
         const fromQ = searchFromUserId ? `&from=${encodeURIComponent(searchFromUserId)}` : '';
-        api(`/workspaces/${workspaceId}/search?q=${enc}&type=messages${fromQ}`)
+        let scope = '';
+        if (searchScope.startsWith('ch:')) {
+          scope += `&channelId=${encodeURIComponent(searchScope.slice(3))}`;
+        } else if (searchScope.startsWith('cv:')) {
+          scope += `&conversationId=${encodeURIComponent(searchScope.slice(3))}`;
+        }
+        const df = searchDateFrom ? `&dateFrom=${encodeURIComponent(searchDateFrom)}` : '';
+        const dt = searchDateTo ? `&dateTo=${encodeURIComponent(searchDateTo)}` : '';
+        const fileQ = searchInFiles ? '' : '&files=0';
+        api(`/workspaces/${workspaceId}/search?q=${enc}&type=messages${fromQ}${scope}${df}${dt}${fileQ}`)
           .then((d) => setSearchResults(d.results || []))
           .catch(console.error);
         return;
@@ -336,7 +364,45 @@ export default function Workspace() {
         .catch(console.error);
     }, 200);
     return () => clearTimeout(t);
-  }, [searchQ, workspaceId, searchTab, searchFromUserId]);
+  }, [
+    searchQ,
+    workspaceId,
+    searchTab,
+    searchFromUserId,
+    searchScope,
+    searchDateFrom,
+    searchDateTo,
+    searchInFiles,
+  ]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    loadUnread();
+  }, [workspaceId, loadUnread]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const id = setInterval(() => loadUnread(), 45000);
+    return () => clearInterval(id);
+  }, [workspaceId, loadUnread]);
+
+  useEffect(() => {
+    if (!channelId && !conversationId) return;
+    const body = channelId ? { channelId } : { conversationId };
+    api('/messages/mark-read', { method: 'POST', body })
+      .then(() => loadUnread())
+      .catch(() => {});
+  }, [channelId, conversationId, loadUnread]);
+
+  useEffect(() => {
+    if (!channelId && !conversationId) return;
+    if (!stickToBottomRef.current) return;
+    const t = setTimeout(() => {
+      const body = channelId ? { channelId } : { conversationId };
+      api('/messages/mark-read', { method: 'POST', body }).then(() => loadUnread()).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [messages, channelId, conversationId, loadUnread]);
 
   useEffect(() => {
     if (!socket || !connected || !workspaceId) return undefined;
@@ -400,15 +466,16 @@ export default function Workspace() {
       setThreadReplies(patch);
     };
     const onTyping = (p) => {
+      const label = p.userName || 'Someone';
       if (p.channelId && p.channelId === channelId && p.userId !== user.id) {
-        setTypingName(p.isTyping ? 'Someone' : null);
+        setTypingName(p.isTyping ? label : null);
         if (p.isTyping) {
           clearTimeout(typingTimer.current);
           typingTimer.current = setTimeout(() => setTypingName(null), 3000);
         }
       }
       if (p.conversationId && p.conversationId === conversationId && p.userId !== user.id) {
-        setTypingName(p.isTyping ? 'Someone' : null);
+        setTypingName(p.isTyping ? label : null);
         if (p.isTyping) {
           clearTimeout(typingTimer.current);
           typingTimer.current = setTimeout(() => setTypingName(null), 3000);
@@ -460,10 +527,11 @@ export default function Workspace() {
       if (now - lastVisibilityRefetchAt.current < 1200) return;
       lastVisibilityRefetchAt.current = now;
       refetchCurrentMessages();
+      loadUnread();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [refetchCurrentMessages]);
+  }, [refetchCurrentMessages, loadUnread]);
 
   useEffect(() => {
     stickToBottomRef.current = true;
@@ -480,6 +548,27 @@ export default function Workspace() {
       messagesEnd.current?.scrollIntoView({ behavior: 'auto' });
     }
   }, [messages, threadReplies]);
+
+  useEffect(() => {
+    if (!pendingMessageScroll) return undefined;
+    const found = messages.some((m) => m.id === pendingMessageScroll);
+    if (!found) {
+      const t = setTimeout(() => setPendingMessageScroll(null), 4000);
+      return () => clearTimeout(t);
+    }
+    const id = requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-message-id="${pendingMessageScroll}"]`);
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.classList.add('ring-2', 'ring-violet-400', 'rounded-xl');
+        setTimeout(() => {
+          el.classList.remove('ring-2', 'ring-violet-400', 'rounded-xl');
+        }, 2200);
+      }
+      setPendingMessageScroll(null);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [messages, pendingMessageScroll]);
 
   useEffect(() => {
     const el = messagesScrollRef.current;
@@ -677,14 +766,13 @@ export default function Workspace() {
     announceCallInChat(mode);
   }
 
-  async function onPickFile(e) {
-    const files = [...(e.target.files || [])];
-    e.target.value = '';
-    if (!files.length) return;
+  async function uploadFilesFromList(files) {
+    const list = [...files];
+    if (!list.length) return;
     const token = getToken();
     const base = getApiBaseUrl();
     const attList = [];
-    for (const file of files) {
+    for (const file of list) {
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch(`${base}/api/upload`, {
@@ -700,6 +788,12 @@ export default function Workspace() {
       attList.push({ url: data.url, mime: data.mime });
     }
     await sendMessage(attList);
+  }
+
+  async function onPickFile(e) {
+    const files = [...(e.target.files || [])];
+    e.target.value = '';
+    await uploadFilesFromList(files);
   }
 
   async function onReaction(msg, emoji) {
@@ -966,6 +1060,57 @@ export default function Workspace() {
               ))}
             </select>
           ) : null}
+          {searchTab === 'messages' ? (
+            <>
+              <select
+                value={searchScope}
+                onChange={(e) => setSearchScope(e.target.value)}
+                className="mb-1.5 w-full rounded border border-[#522653] bg-black/20 px-2 py-1 text-[10px] text-[#d1d2d3]"
+              >
+                <option value="">Scope: all channels &amp; DMs</option>
+                <optgroup label="Channels">
+                  {channels.map((c) => (
+                    <option key={c.id} value={`ch:${c.id}`}>
+                      #{c.name}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Direct">
+                  {conversations.map((cv) => (
+                    <option key={cv.id} value={`cv:${cv.id}`}>
+                      {cv.kind === 'group'
+                        ? cv.title || cv.participants?.map((p) => p.name).join(', ')
+                        : cv.otherUser?.name}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+              <div className="mb-1.5 flex flex-wrap gap-1">
+                <input
+                  type="date"
+                  value={searchDateFrom}
+                  onChange={(e) => setSearchDateFrom(e.target.value)}
+                  className="min-w-0 flex-1 rounded border border-[#522653] bg-black/20 px-1 py-1 text-[10px] text-[#d1d2d3]"
+                  title="From date"
+                />
+                <input
+                  type="date"
+                  value={searchDateTo}
+                  onChange={(e) => setSearchDateTo(e.target.value)}
+                  className="min-w-0 flex-1 rounded border border-[#522653] bg-black/20 px-1 py-1 text-[10px] text-[#d1d2d3]"
+                  title="To date"
+                />
+              </div>
+              <label className="mb-1.5 flex cursor-pointer items-center gap-2 text-[10px] text-[#b39fb3]">
+                <input
+                  type="checkbox"
+                  checked={searchInFiles}
+                  onChange={(e) => setSearchInFiles(e.target.checked)}
+                />
+                Search in file names
+              </label>
+            </>
+          ) : null}
           <input
             type="search"
             value={searchQ}
@@ -984,6 +1129,7 @@ export default function Workspace() {
                   className="block w-full truncate rounded px-2 py-1 text-left text-[#d1d2d3] hover:bg-white/10"
                   onClick={() => {
                     (async () => {
+                      setPendingMessageScroll(r.id);
                       if (r.channelId) {
                         setGroupConv(null);
                         setDmPeer(null);
@@ -991,6 +1137,7 @@ export default function Workspace() {
                         setChannelId(r.channelId);
                       } else if (r.conversationId && workspaceId) {
                         setChannelId(null);
+                        setConversationId(r.conversationId);
                         const { conversations: convs } = await api(
                           `/conversations/workspace/${workspaceId}/conversations`
                         );
@@ -1005,7 +1152,6 @@ export default function Workspace() {
                             setDmPeer(cv.otherUser);
                           }
                         }
-                        setConversationId(r.conversationId);
                       }
                       setSearchQ('');
                       setSearchResults([]);
@@ -1076,11 +1222,16 @@ export default function Workspace() {
                 setChannelId(c.id);
                 setThreadParent(null);
               }}
-              className={`mt-0.5 flex w-full items-center rounded px-2 py-1.5 text-left text-sm ${
+              className={`mt-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${
                 channelId === c.id ? 'bg-[#1164a3] text-white' : 'hover:bg-white/10'
               }`}
             >
-              {c.type === 'private' ? '🔒' : '#'} {c.name}
+              <span className="min-w-0 flex-1 truncate">
+                {c.type === 'private' ? '🔒' : '#'} {c.name}
+              </span>
+              {unreadChannels.has(c.id) ? (
+                <span className="h-2 w-2 shrink-0 rounded-full bg-sky-400" title="Unread" aria-hidden />
+              ) : null}
             </button>
           ))}
           <button
@@ -1136,9 +1287,12 @@ export default function Workspace() {
               ) : (
                 <Avatar user={cv.otherUser} size={8} />
               )}
-              <span className="truncate">
+              <span className="min-w-0 flex-1 truncate">
                 {cv.kind === 'group' ? cv.title || cv.participants?.map((p) => p.name).join(', ') : cv.otherUser.name}
               </span>
+              {unreadConversations.has(cv.id) ? (
+                <span className="h-2 w-2 shrink-0 rounded-full bg-sky-400" title="Unread" aria-hidden />
+              ) : null}
             </button>
           ))}
           <button
@@ -1464,7 +1618,33 @@ export default function Workspace() {
               </button>
             ) : null}
 
-            <div className="border-t border-slate-200/90 bg-gradient-to-t from-slate-50/90 to-white/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-700/90 dark:from-slate-950/90 dark:to-slate-900/80 sm:p-4">
+            <div
+              className={`border-t border-slate-200/90 bg-gradient-to-t from-slate-50/90 to-white/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-shadow dark:border-slate-700/90 dark:from-slate-950/90 dark:to-slate-900/80 sm:p-4 ${
+                composerDrag ? 'ring-2 ring-violet-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-900' : ''
+              }`}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setComposerDrag(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setComposerDrag(true);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget)) return;
+                setComposerDrag(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setComposerDrag(false);
+                if (!channelId && !conversationId) return;
+                const fl = e.dataTransfer?.files;
+                if (fl?.length) uploadFilesFromList(fl);
+              }}
+            >
               <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
               <div className="flex items-end gap-1.5 sm:gap-2">
                 <button
@@ -1654,20 +1834,75 @@ export default function Workspace() {
             ) : null}
             {savedList.map((m) => (
               <div key={m.id} className="rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-600">
-                {workspaceId && m.senderId ? (
-                  <Link
-                    to={m.senderId === user.id ? '/profile' : `/profile/${m.senderId}?ws=${workspaceId}`}
-                    className="flex items-center gap-2 rounded-md outline-none ring-violet-500/0 transition hover:bg-slate-50 focus-visible:ring-2 dark:hover:bg-slate-800/50"
-                  >
-                    <Avatar user={m.sender} size={7} />
-                    <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
-                  </Link>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Avatar user={m.sender} size={7} />
-                    <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    {workspaceId && m.senderId ? (
+                      <Link
+                        to={m.senderId === user.id ? '/profile' : `/profile/${m.senderId}?ws=${workspaceId}`}
+                        className="flex items-center gap-2 rounded-md outline-none ring-violet-500/0 transition hover:bg-slate-50 focus-visible:ring-2 dark:hover:bg-slate-800/50"
+                      >
+                        <Avatar user={m.sender} size={7} />
+                        <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Avatar user={m.sender} size={7} />
+                        <div className="font-semibold text-slate-800 dark:text-slate-100">{m.sender?.name || 'Unknown'}</div>
+                      </div>
+                    )}
                   </div>
-                )}
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      className="rounded bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-800 hover:bg-violet-200 dark:bg-violet-900/50 dark:text-violet-200 dark:hover:bg-violet-900"
+                      onClick={() => {
+                        setPendingMessageScroll(m.id);
+                        setShowSavedModal(false);
+                        if (m.channelId) {
+                          setGroupConv(null);
+                          setDmPeer(null);
+                          setConversationId(null);
+                          setChannelId(m.channelId);
+                        } else if (m.conversationId && workspaceId) {
+                          setChannelId(null);
+                          setConversationId(m.conversationId);
+                          (async () => {
+                            const { conversations: convs } = await api(
+                              `/conversations/workspace/${workspaceId}/conversations`
+                            );
+                            setConversations(convs);
+                            const cv = convs.find((c) => c.id === m.conversationId);
+                            if (cv) {
+                              if (cv.kind === 'group') {
+                                setGroupConv({ title: cv.title, participants: cv.participants });
+                                setDmPeer(null);
+                              } else {
+                                setGroupConv(null);
+                                setDmPeer(cv.otherUser);
+                              }
+                            }
+                          })().catch(console.error);
+                        }
+                      }}
+                    >
+                      Go to message
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border border-slate-200 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                      onClick={async () => {
+                        try {
+                          await api(`/messages/${m.id}/save`, { method: 'DELETE' });
+                          setSavedList((prev) => prev.filter((x) => x.id !== m.id));
+                        } catch (e) {
+                          console.error(e);
+                        }
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
                 <div className="mt-1 whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300">{m.content}</div>
               </div>
             ))}
@@ -2142,6 +2377,7 @@ function MessageBlock({ message, members = [], selfId, workspaceId, onReaction, 
 
   return (
     <div
+      data-message-id={message.id}
       className={`group flex gap-3 rounded-xl px-2 transition-colors duration-150 ${groupWithPrev && !compact ? '-mt-0.5 py-0' : 'py-1'} hover:bg-slate-50/90 dark:hover:bg-slate-800/80 ${compact ? 'text-sm' : ''}`}
     >
       {showHeader ? (
@@ -2216,6 +2452,22 @@ function MessageBlock({ message, members = [], selfId, workspaceId, onReaction, 
           <div key={a.id || i} className="mt-2">
             {a.mime?.startsWith('image/') ? (
               <img src={getPublicAssetUrl(a.url)} alt="" className="max-h-48 rounded border border-slate-200" />
+            ) : a.mime === 'application/pdf' || /\.pdf$/i.test(a.url || '') ? (
+              <div className="max-w-2xl">
+                <iframe
+                  title="PDF preview"
+                  src={getPublicAssetUrl(a.url)}
+                  className="h-96 w-full rounded border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800"
+                />
+                <a
+                  href={getPublicAssetUrl(a.url)}
+                  className="mt-1 inline-block text-xs text-violet-600 underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open PDF in new tab
+                </a>
+              </div>
             ) : (
               <a href={getPublicAssetUrl(a.url)} className="text-violet-600 underline" target="_blank" rel="noreferrer">
                 Download attachment

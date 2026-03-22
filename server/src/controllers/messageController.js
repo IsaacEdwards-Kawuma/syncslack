@@ -4,6 +4,7 @@ import * as conversations from '../db/conversations.js';
 import * as workspaces from '../db/workspaces.js';
 import * as pins from '../db/pins.js';
 import * as savedMessages from '../db/savedMessages.js';
+import * as readState from '../db/readState.js';
 import { emitMessageUpdated } from '../socket/socketServer.js';
 import { isValidUuid } from '../utils/ids.js';
 
@@ -12,6 +13,33 @@ async function canAccessChannel(ch, userId) {
   if (ch.type === 'public') return true;
   const mids = await channels.listChannelMemberIds(ch.id);
   return mids.includes(userId);
+}
+
+export async function markReadHandler(req, res) {
+  try {
+    const { channelId, conversationId } = req.body || {};
+    const uid = req.user.sub;
+    if (channelId) {
+      if (!isValidUuid(channelId)) return res.status(400).json({ error: 'Invalid channel id' });
+      const ch = await channels.findChannelById(channelId);
+      if (!ch) return res.status(404).json({ error: 'Channel not found' });
+      if (!(await canAccessChannel(ch, uid))) return res.status(403).json({ error: 'Not allowed' });
+      await readState.markChannelRead(uid, channelId);
+      return res.json({ ok: true });
+    }
+    if (conversationId) {
+      if (!isValidUuid(conversationId)) return res.status(400).json({ error: 'Invalid conversation id' });
+      if (!(await conversations.isConversationMember(conversationId, uid))) {
+        return res.status(403).json({ error: 'Not allowed' });
+      }
+      await readState.markConversationRead(uid, conversationId);
+      return res.json({ ok: true });
+    }
+    return res.status(400).json({ error: 'channelId or conversationId required' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to mark read' });
+  }
 }
 
 export async function listChannelMessages(req, res) {

@@ -12,6 +12,10 @@ export function mapUserPublic(row) {
     emailVerified: Boolean(row.email_verified_at),
     statusText: row.status_text ?? '',
     statusEmoji: row.status_emoji ?? '',
+    dndUntil:
+      row.dnd_until && typeof row.dnd_until.toISOString === 'function'
+        ? row.dnd_until.toISOString()
+        : row.dnd_until || null,
   };
 }
 
@@ -26,7 +30,7 @@ export async function findUserByEmail(email) {
 
 export async function findUserById(id) {
   const r = await pool.query(
-    `SELECT id, email, password_hash, name, avatar_url, theme, email_verified_at, status_text, status_emoji, created_at, updated_at
+    `SELECT id, email, password_hash, name, avatar_url, theme, email_verified_at, status_text, status_emoji, dnd_until, created_at, updated_at
      FROM users WHERE id = $1`,
     [id]
   );
@@ -37,10 +41,19 @@ export async function createUser({ email, passwordHash, name, emailVerified = tr
   const r = await pool.query(
     `INSERT INTO users (email, password_hash, name, email_verified_at)
      VALUES ($1, $2, $3, CASE WHEN $4 THEN NOW() ELSE NULL END)
-     RETURNING id, email, name, avatar_url, theme, email_verified_at, status_text, status_emoji, created_at, updated_at`,
+     RETURNING id, email, name, avatar_url, theme, email_verified_at, status_text, status_emoji, dnd_until, created_at, updated_at`,
     [email.toLowerCase(), passwordHash, name.trim(), emailVerified]
   );
   return r.rows[0];
+}
+
+export async function updateDndUntil(userId, dndUntil) {
+  const r = await pool.query(
+    `UPDATE users SET dnd_until = $2, updated_at = NOW() WHERE id = $1
+     RETURNING id, email, name, avatar_url, theme, email_verified_at, status_text, status_emoji, dnd_until, created_at, updated_at`,
+    [userId, dndUntil]
+  );
+  return r.rows[0] || null;
 }
 
 export async function updateTheme(userId, theme) {

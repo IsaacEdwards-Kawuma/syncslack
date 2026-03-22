@@ -133,6 +133,65 @@ export default function SettingsPage() {
         </ul>
       </section>
 
+      {/* Do not disturb (server — pauses web push) */}
+      <section className="surface-card mt-6 p-6 transition hover:shadow-soft-lg">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Do not disturb</h2>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          Silences push notifications until the time you choose. In-app toasts and the app itself are not muted.
+        </p>
+        {user?.dndUntil && new Date(user.dndUntil) > new Date() ? (
+          <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
+            Active until {new Date(user.dndUntil).toLocaleString()}
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Push notifications are allowed (when enabled below).</p>
+        )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[
+            { label: '30 min', minutes: 30 },
+            { label: '1 hour', minutes: 60 },
+            { label: '2 hours', minutes: 120 },
+            { label: '8 hours', minutes: 480 },
+          ].map(({ label, minutes }) => (
+            <button
+              key={minutes}
+              type="button"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"
+              onClick={async () => {
+                setErr('');
+                setMsg('');
+                try {
+                  await api('/auth/me/dnd', { method: 'PATCH', body: { minutes } });
+                  await refresh();
+                  setMsg(`Do not disturb on for ${label}.`);
+                } catch (err) {
+                  setErr(err.message || 'Could not update DND');
+                }
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-700"
+            onClick={async () => {
+              setErr('');
+              setMsg('');
+              try {
+                await api('/auth/me/dnd', { method: 'PATCH', body: { clear: true } });
+                await refresh();
+                setMsg('Do not disturb turned off.');
+              } catch (err) {
+                setErr(err.message || 'Could not clear DND');
+              }
+            }}
+          >
+            Turn off
+          </button>
+        </div>
+      </section>
+
       {/* Notification preferences (client) */}
       <section className="surface-card mt-6 p-6 transition hover:shadow-soft-lg">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Notifications</h2>

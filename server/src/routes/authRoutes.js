@@ -6,6 +6,7 @@ import {
   updateTheme,
   updateStatus,
   updateAvatar,
+  updateDnd,
   forgotPassword,
   resetPassword,
   changePassword,
@@ -25,5 +26,6 @@ r.get('/me', authMiddleware, me);
 r.patch('/me/theme', authMiddleware, updateTheme);
 r.patch('/me/status', authMiddleware, updateStatus);
 r.patch('/me/avatar', authMiddleware, updateAvatar);
+r.patch('/me/dnd', authMiddleware, updateDnd);
 
 export default r;

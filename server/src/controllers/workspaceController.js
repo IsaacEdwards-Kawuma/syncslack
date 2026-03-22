@@ -10,6 +10,7 @@ import {
 } from '../db/search.js';
 import { publicAppBaseUrl } from '../utils/mail.js';
 import { isValidUuid } from '../utils/ids.js';
+import * as readState from '../db/readState.js';
 
 async function canManageWorkspace(workspaceId, userId) {
   const role = await workspaces.getMemberRole(workspaceId, userId);
@@ -188,6 +189,21 @@ export async function createWorkspaceInvite(req, res) {
   }
 }
 
+export async function getUnreadSummary(req, res) {
+  try {
+    const { workspaceId } = req.params;
+    if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace id' });
+    if (!(await workspaces.isMember(workspaceId, req.user.sub))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+    const summary = await readState.getUnreadSummaryForWorkspace(workspaceId, req.user.sub);
+    return res.json(summary);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to load unread state' });
+  }
+}
+
 export async function searchWorkspace(req, res) {
   try {
     const { workspaceId } = req.params;
@@ -213,7 +229,19 @@ export async function searchWorkspace(req, res) {
       return res.json({ results: [], type: 'messages' });
     }
     const fromUserId = req.query.from || req.query.fromUser || null;
-    const results = await searchWorkspaceMessages(workspaceId, req.user.sub, trimmed, 40, fromUserId);
+    const channelId = req.query.channelId || null;
+    const conversationId = req.query.conversationId || null;
+    const dateFrom = req.query.dateFrom || null;
+    const dateTo = req.query.dateTo || null;
+    const searchInFiles = req.query.files !== '0';
+    const results = await searchWorkspaceMessages(workspaceId, req.user.sub, trimmed, 40, {
+      fromUserId,
+      channelId,
+      conversationId,
+      dateFrom,
+      dateTo,
+      searchInFiles,
+    });
     return res.json({ results, type: 'messages' });
   } catch (err) {
     console.error(err);

@@ -110,6 +110,29 @@ export async function updateStatus(req, res) {
   }
 }
 
+export async function updateDnd(req, res) {
+  try {
+    const { dndUntil, minutes, clear } = req.body || {};
+    let until = null;
+    if (clear === true || minutes === 0 || dndUntil === null) {
+      until = null;
+    } else if (typeof minutes === 'number' && minutes > 0 && minutes <= 24 * 60) {
+      until = new Date(Date.now() + minutes * 60 * 1000);
+    } else if (typeof dndUntil === 'string' && dndUntil.trim()) {
+      until = new Date(dndUntil);
+      if (Number.isNaN(until.getTime())) return res.status(400).json({ error: 'Invalid dndUntil' });
+    } else {
+      return res.status(400).json({ error: 'Provide clear: true, minutes (1–1440), or dndUntil (ISO)' });
+    }
+    const user = await users.updateDndUntil(req.user.sub, until);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({ user: users.mapUserPublic(user) });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Update failed' });
+  }
+}
+
 export async function updateAvatar(req, res) {
   try {
     let { avatarUrl } = req.body;

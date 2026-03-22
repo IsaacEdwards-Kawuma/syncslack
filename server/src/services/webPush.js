@@ -1,5 +1,6 @@
 import webpush from 'web-push';
 import * as pushSubscriptions from '../db/pushSubscriptions.js';
+import * as users from '../db/users.js';
 
 const vapidPublic = process.env.VAPID_PUBLIC_KEY?.trim();
 const vapidPrivate = process.env.VAPID_PRIVATE_KEY?.trim();
@@ -18,6 +19,11 @@ export function isWebPushConfigured() {
 /** Send Web Push to all subscriptions for a user (best-effort; invalid subs removed). */
 export async function sendPushToUser(userId, title, body, data = {}) {
   if (!configured) return;
+  const u = await users.findUserById(userId);
+  if (u?.dnd_until) {
+    const t = new Date(u.dnd_until);
+    if (!Number.isNaN(t.getTime()) && t > new Date()) return;
+  }
   const rows = await pushSubscriptions.listEndpointsForUser(userId);
   const payload = JSON.stringify({ title, body, ...data });
   for (const row of rows) {

@@ -1,21 +1,102 @@
 import { pool } from '../config/db.js';
 import { isValidUuid } from '../utils/ids.js';
 
-export async function searchWorkspaceMessages(workspaceId, userId, query, limit = 40, fromUserId = null) {
+/**
+ * @param {string} workspaceId
+ * @param {string} userId
+ * @param {string} query
+ * @param {number} limit
+ * @param {object} [options]
+ * @param {string|null} [options.fromUserId]
+ * @param {string|null} [options.channelId] — search only this channel (no DMs)
+ * @param {string|null} [options.conversationId] — search only this DM/group
+ * @param {string|null} [options.dateFrom] — ISO date
+ * @param {string|null} [options.dateTo] — ISO date (inclusive end of day)
+ * @param {boolean} [options.searchInFiles=true] — also match attachment URLs / filenames
+ */
+export async function searchWorkspaceMessages(workspaceId, userId, query, limit = 40, options = {}) {
   const safe = String(query).trim().slice(0, 200).replace(/%/g, '').replace(/_/g, '');
   if (!safe) return [];
   const q = `%${safe}%`;
 
-  const channelSql = `
+  const fromUserId =
+    options.fromUserId && isValidUuid(String(options.fromUserId)) ? String(options.fromUserId) : null;
+  const scopeChannelId =
+    options.channelId && isValidUuid(String(options.channelId)) ? String(options.channelId) : null;
+  const scopeConversationId =
+    options.conversationId && isValidUuid(String(options.conversationId))
+      ? String(options.conversationId)
+      : null;
+  const searchInFiles = options.searchInFiles !== false;
+
+  let dateFrom = options.dateFrom ? new Date(options.dateFrom) : null;
+  let dateTo = options.dateTo ? new Date(options.dateTo) : null;
+  if (dateFrom && isNaN(dateFrom.getTime())) dateFrom = null;
+  if (dateTo && isNaN(dateTo.getTime())) dateTo = null;
+  if (dateTo) {
+    dateTo = new Date(dateTo);
+    dateTo.setHours(23, 59, 59, 999);
+  }
+
+  const contentMatch = searchInFiles
+    ? `(m.content ILIKE $2 OR EXISTS (SELECT 1 FROM message_attachments ma WHERE ma.message_id = m.id AND ma.url ILIKE $2))`
+    : `m.content ILIKE $2`;
+
+  const params = [workspaceId, q, userId];
+  let idx = 4;
+  let filterSql = '';
+
+  if (fromUserId) {
+    filterSql += ` AND m.sender_id = $${idx}::uuid`;
+    params.push(fromUserId);
+    idx += 1;
+  }
+  if (dateFrom) {
+    filterSql += ` AND m.created_at >= $${idx}::timestamptz`;
+    params.push(dateFrom.toISOString());
+    idx += 1;
+  }
+  if (dateTo) {
+    filterSql += ` AND m.created_at <= $${idx}::timestamptz`;
+    params.push(dateTo.toISOString());
+    idx += 1;
+  }
+
+  let channelSql;
+  let convSql;
+
+  if (scopeConversationId) {
+    channelSql = `SELECT m.id, m.content, m.created_at, NULL::uuid AS channel_id, NULL::uuid AS conversation_id,
+           NULL::text AS channel_name, NULL::text AS conv_label FROM messages m WHERE false`;
+    convSql = `
+    SELECT m.id, m.content, m.created_at, NULL::uuid AS channel_id, m.conversation_id,
+           NULL::text AS channel_name,
+           COALESCE(c.title, '') AS conv_label
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    INNER JOIN conversation_members mem ON mem.conversation_id = c.id AND mem.user_id = $3::uuid
+    WHERE c.workspace_id = $1::uuid
+      AND c.id = $${idx}::uuid
+      AND m.deleted_at IS NULL
+      AND ${contentMatch}
+      ${filterSql}
+  `;
+    params.push(scopeConversationId);
+    idx += 1;
+  } else if (scopeChannelId) {
+    convSql = `SELECT m.id, m.content, m.created_at, NULL::uuid AS channel_id, NULL::uuid AS conversation_id,
+           NULL::text AS channel_name, NULL::text AS conv_label FROM messages m WHERE false`;
+    channelSql = `
     SELECT m.id, m.content, m.created_at, m.channel_id AS channel_id, NULL::uuid AS conversation_id,
            ch.name AS channel_name, NULL::text AS conv_label
     FROM messages m
     JOIN channels ch ON ch.id = m.channel_id
     WHERE ch.workspace_id = $1::uuid
+      AND ch.id = $${idx}::uuid
       AND m.deleted_at IS NULL
       AND m.thread_parent_id IS NULL
-      AND m.content ILIKE $2
-      ${fromUserId && isValidUuid(fromUserId) ? ' AND m.sender_id = $5::uuid' : ''}
+      AND ${contentMatch}
+      ${filterSql}
       AND (
         ch.type = 'public'
         OR EXISTS (
@@ -23,8 +104,27 @@ export async function searchWorkspaceMessages(workspaceId, userId, query, limit 
         )
       )
   `;
-
-  const convSql = `
+    params.push(scopeChannelId);
+    idx += 1;
+  } else {
+    channelSql = `
+    SELECT m.id, m.content, m.created_at, m.channel_id AS channel_id, NULL::uuid AS conversation_id,
+           ch.name AS channel_name, NULL::text AS conv_label
+    FROM messages m
+    JOIN channels ch ON ch.id = m.channel_id
+    WHERE ch.workspace_id = $1::uuid
+      AND m.deleted_at IS NULL
+      AND m.thread_parent_id IS NULL
+      AND ${contentMatch}
+      ${filterSql}
+      AND (
+        ch.type = 'public'
+        OR EXISTS (
+          SELECT 1 FROM channel_members cm WHERE cm.channel_id = ch.id AND cm.user_id = $3::uuid
+        )
+      )
+  `;
+    convSql = `
     SELECT m.id, m.content, m.created_at, NULL::uuid AS channel_id, m.conversation_id,
            NULL::text AS channel_name,
            COALESCE(c.title, '') AS conv_label
@@ -33,19 +133,18 @@ export async function searchWorkspaceMessages(workspaceId, userId, query, limit 
     INNER JOIN conversation_members mem ON mem.conversation_id = c.id AND mem.user_id = $3::uuid
     WHERE c.workspace_id = $1::uuid
       AND m.deleted_at IS NULL
-      AND m.content ILIKE $2
-      ${fromUserId && isValidUuid(fromUserId) ? ' AND m.sender_id = $5::uuid' : ''}
+      AND ${contentMatch}
+      ${filterSql}
   `;
+  }
 
-  const params =
-    fromUserId && isValidUuid(fromUserId)
-      ? [workspaceId, q, userId, limit, fromUserId]
-      : [workspaceId, q, userId, limit];
+  params.push(limit);
+  const limitParamIndex = idx;
 
   const r = await pool.query(
     `(${channelSql}) UNION ALL (${convSql})
      ORDER BY created_at DESC
-     LIMIT $4`,
+     LIMIT $${limitParamIndex}`,
     params
   );
 

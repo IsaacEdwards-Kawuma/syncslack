@@ -233,3 +233,21 @@ CREATE TABLE IF NOT EXISTS incoming_webhooks (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_incoming_webhooks_channel ON incoming_webhooks (channel_id);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS dnd_until TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS user_channel_reads (
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  channel_id UUID NOT NULL REFERENCES channels (id) ON DELETE CASCADE,
+  last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, channel_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_channel_reads_user ON user_channel_reads (user_id);
+
+CREATE TABLE IF NOT EXISTS user_conversation_reads (
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  conversation_id UUID NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+  last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, conversation_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_conv_reads_user ON user_conversation_reads (user_id);
