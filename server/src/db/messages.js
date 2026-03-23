@@ -56,13 +56,16 @@ function rowToMessageAndSender(row) {
 async function fetchAttachmentsMap(messageIds) {
   if (!messageIds.length) return new Map();
   const r = await pool.query(
-    `SELECT id, message_id, url, mime FROM message_attachments WHERE message_id = ANY($1::uuid[]) ORDER BY created_at ASC`,
+    `SELECT id, message_id, url, mime, original_name
+     FROM message_attachments
+     WHERE message_id = ANY($1::uuid[])
+     ORDER BY created_at ASC`,
     [messageIds]
   );
   const map = new Map();
   for (const row of r.rows) {
     const list = map.get(row.message_id) || [];
-    list.push({ id: row.id, url: row.url, mime: row.mime });
+    list.push({ id: row.id, url: row.url, mime: row.mime, originalName: row.original_name });
     map.set(row.message_id, list);
   }
   return map;
@@ -135,6 +138,73 @@ export async function listChannelRootMessages(channelId, before, limit) {
   return enrichList(list);
 }
 
+export async function listChannelRootMessagesAround(channelId, messageId, limit = 60) {
+  const l = Math.max(10, Math.min(200, parseInt(limit, 10) || 60));
+  const beforeLimit = Math.floor((l - 1) / 2);
+  const afterLimit = l - 1 - beforeLimit;
+
+  const cur = await pool.query(
+    `SELECT m.*, u.name AS sender_name, u.email AS sender_email, u.avatar_url AS sender_avatar_url
+     FROM messages m
+     JOIN users u ON u.id = m.sender_id
+     WHERE m.channel_id = $1
+       AND m.conversation_id IS NULL
+       AND m.thread_parent_id IS NULL
+       AND m.deleted_at IS NULL
+       AND m.id = $2`,
+    [channelId, messageId]
+  );
+  if (!cur.rows[0]) return [];
+
+  const curRow = cur.rows[0];
+  const curCreatedAt = curRow.created_at;
+  const curId = curRow.id;
+  const { m: curMsg, senderRow: curSender } = rowToMessageAndSender(curRow);
+  const current = formatMessageRow(curMsg, curSender);
+
+  const rBefore = await pool.query(
+    `SELECT m.*, u.name AS sender_name, u.email AS sender_email, u.avatar_url AS sender_avatar_url
+     FROM messages m
+     JOIN users u ON u.id = m.sender_id
+     WHERE m.channel_id = $1
+       AND m.conversation_id IS NULL
+       AND m.thread_parent_id IS NULL
+       AND m.deleted_at IS NULL
+       AND (m.created_at, m.id) < ($2::timestamptz, $3::uuid)
+     ORDER BY m.created_at DESC, m.id DESC
+     LIMIT $4`,
+    [channelId, curCreatedAt, curId, beforeLimit]
+  );
+
+  const rAfter = await pool.query(
+    `SELECT m.*, u.name AS sender_name, u.email AS sender_email, u.avatar_url AS sender_avatar_url
+     FROM messages m
+     JOIN users u ON u.id = m.sender_id
+     WHERE m.channel_id = $1
+       AND m.conversation_id IS NULL
+       AND m.thread_parent_id IS NULL
+       AND m.deleted_at IS NULL
+       AND (m.created_at, m.id) > ($2::timestamptz, $3::uuid)
+     ORDER BY m.created_at ASC, m.id ASC
+     LIMIT $4`,
+    [channelId, curCreatedAt, curId, afterLimit]
+  );
+
+  const beforeList = rBefore.rows
+    .map((row) => {
+      const { m, senderRow } = rowToMessageAndSender(row);
+      return formatMessageRow(m, senderRow);
+    })
+    .reverse();
+
+  const afterList = rAfter.rows.map((row) => {
+    const { m, senderRow } = rowToMessageAndSender(row);
+    return formatMessageRow(m, senderRow);
+  });
+
+  return enrichList([...beforeList, current, ...afterList]);
+}
+
 export async function listThreadReplies(parentId) {
   const r = await pool.query(
     `SELECT m.*, u.name AS sender_name, u.email AS sender_email, u.avatar_url AS sender_avatar_url
@@ -183,13 +253,81 @@ export async function listConversationMessages(conversationId, before, limit) {
   return enrichList(list);
 }
 
+export async function listConversationMessagesAround(conversationId, messageId, limit = 60) {
+  const l = Math.max(10, Math.min(200, parseInt(limit, 10) || 60));
+  const beforeLimit = Math.floor((l - 1) / 2);
+  const afterLimit = l - 1 - beforeLimit;
+
+  const cur = await pool.query(
+    `SELECT m.*, u.name AS sender_name, u.email AS sender_email, u.avatar_url AS sender_avatar_url
+     FROM messages m
+     JOIN users u ON u.id = m.sender_id
+     WHERE m.conversation_id = $1
+       AND m.channel_id IS NULL
+       AND m.thread_parent_id IS NULL
+       AND m.deleted_at IS NULL
+       AND m.id = $2`,
+    [conversationId, messageId]
+  );
+  if (!cur.rows[0]) return [];
+
+  const curRow = cur.rows[0];
+  const curCreatedAt = curRow.created_at;
+  const curId = curRow.id;
+  const { m: curMsg, senderRow: curSender } = rowToMessageAndSender(curRow);
+  const current = formatMessageRow(curMsg, curSender);
+
+  const rBefore = await pool.query(
+    `SELECT m.*, u.name AS sender_name, u.email AS sender_email, u.avatar_url AS sender_avatar_url
+     FROM messages m
+     JOIN users u ON u.id = m.sender_id
+     WHERE m.conversation_id = $1
+       AND m.channel_id IS NULL
+       AND m.thread_parent_id IS NULL
+       AND m.deleted_at IS NULL
+       AND (m.created_at, m.id) < ($2::timestamptz, $3::uuid)
+     ORDER BY m.created_at DESC, m.id DESC
+     LIMIT $4`,
+    [conversationId, curCreatedAt, curId, beforeLimit]
+  );
+
+  const rAfter = await pool.query(
+    `SELECT m.*, u.name AS sender_name, u.email AS sender_email, u.avatar_url AS sender_avatar_url
+     FROM messages m
+     JOIN users u ON u.id = m.sender_id
+     WHERE m.conversation_id = $1
+       AND m.channel_id IS NULL
+       AND m.thread_parent_id IS NULL
+       AND m.deleted_at IS NULL
+       AND (m.created_at, m.id) > ($2::timestamptz, $3::uuid)
+     ORDER BY m.created_at ASC, m.id ASC
+     LIMIT $4`,
+    [conversationId, curCreatedAt, curId, afterLimit]
+  );
+
+  const beforeList = rBefore.rows
+    .map((row) => {
+      const { m, senderRow } = rowToMessageAndSender(row);
+      return formatMessageRow(m, senderRow);
+    })
+    .reverse();
+
+  const afterList = rAfter.rows.map((row) => {
+    const { m, senderRow } = rowToMessageAndSender(row);
+    return formatMessageRow(m, senderRow);
+  });
+
+  return enrichList([...beforeList, current, ...afterList]);
+}
+
 async function insertAttachments(messageId, attachments) {
   if (!attachments?.length) return;
   for (const a of attachments) {
     if (!a?.url) continue;
     await pool.query(
-      `INSERT INTO message_attachments (message_id, url, mime) VALUES ($1, $2, $3)`,
-      [messageId, a.url, a.mime || '']
+      `INSERT INTO message_attachments (message_id, url, mime, original_name)
+       VALUES ($1, $2, $3, $4)`,
+      [messageId, a.url, a.mime || '', a.originalName || '']
     );
   }
 }
@@ -208,7 +346,7 @@ export async function createChannelMessage({
     attachments && attachments.length
       ? attachments
       : attachmentUrl
-        ? [{ url: attachmentUrl, mime: attachmentMime || '' }]
+        ? [{ url: attachmentUrl, mime: attachmentMime || '', originalName: '' }]
         : [];
   const first = attList[0] || {};
   const r = await pool.query(
@@ -235,7 +373,7 @@ export async function createConversationMessage({
     attachments && attachments.length
       ? attachments
       : attachmentUrl
-        ? [{ url: attachmentUrl, mime: attachmentMime || '' }]
+        ? [{ url: attachmentUrl, mime: attachmentMime || '', originalName: '' }]
         : [];
   const first = attList[0] || {};
   const r = await pool.query(

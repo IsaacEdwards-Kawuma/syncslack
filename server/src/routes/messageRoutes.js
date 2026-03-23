@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import {
   listChannelMessages,
+  listChannelMessagesAround,
   listConversationMessages,
+  listConversationMessagesAround,
   listThreadReplies,
   editMessage,
   deleteMessage,
@@ -24,9 +26,11 @@ r.get('/saved', listSavedMessages);
 r.get('/workspace/:workspaceId/members', listWorkspaceMembers);
 r.get('/channel/:channelId/pins', listChannelPins);
 r.get('/channel/:channelId/messages', listChannelMessages);
+r.get('/channel/:channelId/messages/around/:messageId', listChannelMessagesAround);
 r.get('/channel/:channelId/thread/:messageId', listThreadReplies);
 r.get('/conversation/:conversationId/thread/:messageId', listThreadReplies);
 r.get('/conversation/:conversationId/messages', listConversationMessages);
+r.get('/conversation/:conversationId/messages/around/:messageId', listConversationMessagesAround);
 r.post('/:messageId/pin', pinMessageHandler);
 r.delete('/:messageId/pin', unpinMessageHandler);
 r.post('/:messageId/save', saveMessageHandler);

@@ -140,6 +140,7 @@ export default function Workspace() {
   const messagesScrollRef = useRef(null);
   const stickToBottomRef = useRef(true);
   const fileRef = useRef(null);
+  const skipNextMessageFetchRef = useRef(false);
   const [showJumpLatest, setShowJumpLatest] = useState(false);
   const notifDebounceRef = useRef(null);
   const lastVisibilityRefetchAt = useRef(0);
@@ -486,6 +487,8 @@ export default function Workspace() {
       clearTimeout(notifDebounceRef.current);
       notifDebounceRef.current = setTimeout(() => loadNotifications().catch(() => {}), 200);
       if (n.type === 'dm' || n.type === 'mention') {
+        const dndActive = user?.dndUntil && new Date(user.dndUntil) > new Date();
+        if (dndActive) return;
         const showPreview = readMessagePreviewInNotif();
         const text =
           n.type === 'mention'
@@ -600,6 +603,10 @@ export default function Workspace() {
       setMessages([]);
       return;
     }
+    if (skipNextMessageFetchRef.current) {
+      skipNextMessageFetchRef.current = false;
+      return;
+    }
     (async () => {
       const { messages: list } = await api(`/messages/channel/${channelId}/messages`);
       setMessages(list);
@@ -609,6 +616,10 @@ export default function Workspace() {
   useEffect(() => {
     if (!conversationId) {
       if (!channelId) setMessages([]);
+      return;
+    }
+    if (skipNextMessageFetchRef.current) {
+      skipNextMessageFetchRef.current = false;
       return;
     }
     (async () => {
@@ -785,7 +796,7 @@ export default function Workspace() {
         alert(data.error || 'Upload failed');
         return;
       }
-      attList.push({ url: data.url, mime: data.mime });
+      attList.push({ url: data.url, mime: data.mime, originalName: data.originalName || '' });
     }
     await sendMessage(attList);
   }
@@ -1857,33 +1868,48 @@ export default function Workspace() {
                       type="button"
                       className="rounded bg-violet-100 px-2 py-1 text-sm sm:text-[10px] font-medium text-violet-800 hover:bg-violet-200 dark:bg-violet-900/50 dark:text-violet-200 dark:hover:bg-violet-900"
                       onClick={() => {
-                        setPendingMessageScroll(m.id);
-                        setShowSavedModal(false);
-                        if (m.channelId) {
-                          setGroupConv(null);
-                          setDmPeer(null);
-                          setConversationId(null);
-                          setChannelId(m.channelId);
-                        } else if (m.conversationId && workspaceId) {
-                          setChannelId(null);
-                          setConversationId(m.conversationId);
-                          (async () => {
-                            const { conversations: convs } = await api(
-                              `/conversations/workspace/${workspaceId}/conversations`
-                            );
-                            setConversations(convs);
-                            const cv = convs.find((c) => c.id === m.conversationId);
-                            if (cv) {
-                              if (cv.kind === 'group') {
-                                setGroupConv({ title: cv.title, participants: cv.participants });
-                                setDmPeer(null);
-                              } else {
-                                setGroupConv(null);
-                                setDmPeer(cv.otherUser);
+                        (async () => {
+                          try {
+                            setThreadParent(null);
+                            skipNextMessageFetchRef.current = true;
+                            setPendingMessageScroll(m.id);
+                            setShowSavedModal(false);
+                            if (m.channelId) {
+                              setGroupConv(null);
+                              setDmPeer(null);
+                              setConversationId(null);
+                              setChannelId(m.channelId);
+                              const { messages: list } = await api(
+                                `/messages/channel/${m.channelId}/messages/around/${m.id}?limit=80`
+                              );
+                              setMessages(list);
+                            } else if (m.conversationId && workspaceId) {
+                              setChannelId(null);
+                              setConversationId(m.conversationId);
+                              const { conversations: convs } = await api(
+                                `/conversations/workspace/${workspaceId}/conversations`
+                              );
+                              setConversations(convs);
+                              const cv = convs.find((c) => c.id === m.conversationId);
+                              if (cv) {
+                                if (cv.kind === 'group') {
+                                  setGroupConv({ title: cv.title, participants: cv.participants });
+                                  setDmPeer(null);
+                                } else {
+                                  setGroupConv(null);
+                                  setDmPeer(cv.otherUser);
+                                }
                               }
+                              const { messages: list } = await api(
+                                `/messages/conversation/${m.conversationId}/messages/around/${m.id}?limit=80`
+                              );
+                              setMessages(list);
                             }
-                          })().catch(console.error);
-                        }
+                          } catch (e) {
+                            console.error(e);
+                            skipNextMessageFetchRef.current = false;
+                          }
+                        })();
                       }}
                     >
                       Go to message
@@ -2447,12 +2473,40 @@ function MessageBlock({ message, members = [], selfId, workspaceId, onReaction, 
         {(message.attachments?.length
           ? message.attachments
           : message.attachmentUrl
-            ? [{ url: message.attachmentUrl, mime: message.attachmentMime }]
+            ? [{ url: message.attachmentUrl, mime: message.attachmentMime, originalName: '' }]
             : []
         ).map((a, i) => (
           <div key={a.id || i} className="mt-2">
             {a.mime?.startsWith('image/') ? (
               <img src={getPublicAssetUrl(a.url)} alt="" className="max-h-48 rounded border border-slate-200" />
+            ) : a.mime?.startsWith('video/') || /\.(mp4|webm|ogg|mkv)$/i.test(a.url || '') ? (
+              <div className="max-w-2xl">
+                <video
+                  controls
+                  src={getPublicAssetUrl(a.url)}
+                  className="max-h-96 w-full rounded border border-slate-200 bg-black"
+                />
+                <a
+                  href={getPublicAssetUrl(a.url)}
+                  className="mt-1 inline-block text-sm sm:text-xs text-violet-600 underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open video in new tab
+                </a>
+              </div>
+            ) : a.mime?.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac)$/i.test(a.url || '') ? (
+              <div className="max-w-2xl">
+                <audio controls src={getPublicAssetUrl(a.url)} className="w-full" />
+                <a
+                  href={getPublicAssetUrl(a.url)}
+                  className="mt-1 inline-block text-sm sm:text-xs text-violet-600 underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open audio in new tab
+                </a>
+              </div>
             ) : a.mime === 'application/pdf' || /\.pdf$/i.test(a.url || '') ? (
               <div className="max-w-2xl">
                 <iframe
@@ -2472,6 +2526,7 @@ function MessageBlock({ message, members = [], selfId, workspaceId, onReaction, 
             ) : (
               <a href={getPublicAssetUrl(a.url)} className="text-violet-600 underline" target="_blank" rel="noreferrer">
                 Download attachment
+                {a.originalName ? ` (${a.originalName})` : ''}
               </a>
             )}
           </div>

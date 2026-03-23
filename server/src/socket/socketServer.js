@@ -17,12 +17,23 @@ import { sendPushToUser } from '../services/webPush.js';
 
 const onlineByWorkspace = new Map();
 
+async function isDndActive(userId, cache) {
+  const key = String(userId);
+  if (cache.has(key)) return cache.get(key);
+  const u = await users.findUserById(userId);
+  const active = Boolean(u?.dndUntil) && new Date(u.dndUntil) > new Date();
+  cache.set(key, active);
+  return active;
+}
+
 function normalizeAttachments(attachmentUrl, attachmentMime, attachments) {
   if (attachments && Array.isArray(attachments) && attachments.length) {
-    return attachments.map((a) => ({ url: a.url || '', mime: a.mime || '' })).filter((a) => a.url);
+    return attachments
+      .map((a) => ({ url: a.url || '', mime: a.mime || '', originalName: a.originalName || '' }))
+      .filter((a) => a.url);
   }
   if (attachmentUrl && String(attachmentUrl).length) {
-    return [{ url: attachmentUrl, mime: attachmentMime || '' }];
+    return [{ url: attachmentUrl, mime: attachmentMime || '', originalName: '' }];
   }
   return [];
 }
@@ -30,6 +41,7 @@ function normalizeAttachments(attachmentUrl, attachmentMime, attachments) {
 async function notifyMentions(io, msg, senderId, workspaceId, channelIdForMute = null) {
   const ids = extractMentionedUserIds(msg.content);
   if (!ids.length) return;
+  const dndCache = new Map();
   const valid = [];
   for (const id of ids) {
     if (!isValidUuid(id)) continue;
@@ -48,14 +60,16 @@ async function notifyMentions(io, msg, senderId, workspaceId, channelIdForMute =
       title: 'You were mentioned',
       body: msg.content.slice(0, 200),
     });
-    io.to(`user:${uid}`).emit('notification', {
-      type: 'mention',
-      workspaceId,
-      messageId: msg.id,
-      notificationId: n.id,
-      preview: msg.content.slice(0, 120),
-      fromUserId: senderId,
-    });
+    if (!(await isDndActive(uid, dndCache))) {
+      io.to(`user:${uid}`).emit('notification', {
+        type: 'mention',
+        workspaceId,
+        messageId: msg.id,
+        notificationId: n.id,
+        preview: msg.content.slice(0, 120),
+        fromUserId: senderId,
+      });
+    }
     await sendPushToUser(uid, 'You were mentioned', msg.content.slice(0, 120), {
       type: 'mention',
       messageId: msg.id,
@@ -67,14 +81,17 @@ async function notifyMentions(io, msg, senderId, workspaceId, channelIdForMute =
 async function emitDmNotifications(io, conv, conversationId, userId, text) {
   if (conv.kind === 'group') {
     const memberIds = await conversations.listConversationMemberIds(conversationId);
+    const dndCache = new Map();
     for (const other of memberIds) {
       if (String(other) !== String(userId)) {
-        io.to(`user:${other}`).emit('notification', {
-          type: 'dm',
-          conversationId,
-          preview: text.slice(0, 120),
-          fromUserId: userId,
-        });
+        if (!(await isDndActive(other, dndCache))) {
+          io.to(`user:${other}`).emit('notification', {
+            type: 'dm',
+            conversationId,
+            preview: text.slice(0, 120),
+            fromUserId: userId,
+          });
+        }
         await sendPushToUser(other, 'New message', text.slice(0, 120), {
           type: 'dm',
           conversationId,
@@ -84,12 +101,15 @@ async function emitDmNotifications(io, conv, conversationId, userId, text) {
   } else {
     const other = conversations.getOtherParticipantId(conv, userId);
     if (other) {
-      io.to(`user:${other}`).emit('notification', {
-        type: 'dm',
-        conversationId,
-        preview: text.slice(0, 120),
-        fromUserId: userId,
-      });
+      const dndCache = new Map();
+      if (!(await isDndActive(other, dndCache))) {
+        io.to(`user:${other}`).emit('notification', {
+          type: 'dm',
+          conversationId,
+          preview: text.slice(0, 120),
+          fromUserId: userId,
+        });
+      }
       await sendPushToUser(other, 'Direct message', text.slice(0, 120), {
         type: 'dm',
         conversationId,

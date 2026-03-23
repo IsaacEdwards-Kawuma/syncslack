@@ -146,9 +146,13 @@ CREATE TABLE IF NOT EXISTS message_attachments (
   message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
   url TEXT NOT NULL,
   mime TEXT NOT NULL DEFAULT '',
+  original_name TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_message_attachments_msg ON message_attachments(message_id);
+
+ALTER TABLE message_attachments
+  ADD COLUMN IF NOT EXISTS original_name TEXT NOT NULL DEFAULT '';
 
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'direct';
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT '';

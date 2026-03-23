@@ -39,7 +39,7 @@ export async function searchWorkspaceMessages(workspaceId, userId, query, limit 
   }
 
   const contentMatch = searchInFiles
-    ? `(m.content ILIKE $2 OR EXISTS (SELECT 1 FROM message_attachments ma WHERE ma.message_id = m.id AND ma.url ILIKE $2))`
+    ? `(m.content ILIKE $2 OR EXISTS (SELECT 1 FROM message_attachments ma WHERE ma.message_id = m.id AND (ma.url ILIKE $2 OR ma.original_name ILIKE $2)))`
     : `m.content ILIKE $2`;
 
   const params = [workspaceId, q, userId];

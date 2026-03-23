@@ -63,6 +63,25 @@ export async function listChannelMessages(req, res) {
   }
 }
 
+export async function listChannelMessagesAround(req, res) {
+  try {
+    const { channelId, messageId } = req.params;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 60, 200);
+    if (!isValidUuid(channelId)) return res.status(400).json({ error: 'Invalid channel id' });
+    if (!isValidUuid(messageId)) return res.status(400).json({ error: 'Invalid message id' });
+
+    const channel = await channels.findChannelById(channelId);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (!(await canAccessChannel(channel, req.user.sub))) return res.status(403).json({ error: 'Not allowed' });
+
+    const list = await messages.listChannelRootMessagesAround(channelId, messageId, limit);
+    return res.json({ messages: list });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to load messages' });
+  }
+}
+
 export async function listThreadReplies(req, res) {
   try {
     const { messageId } = req.params;
@@ -105,6 +124,28 @@ export async function listConversationMessages(req, res) {
       return res.status(403).json({ error: 'Not a participant' });
     }
     const list = await messages.listConversationMessages(conversationId, before || null, limit);
+    return res.json({ messages: list });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to load messages' });
+  }
+}
+
+export async function listConversationMessagesAround(req, res) {
+  try {
+    const { conversationId, messageId } = req.params;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 60, 200);
+    if (!isValidUuid(conversationId)) return res.status(400).json({ error: 'Invalid conversation id' });
+    if (!isValidUuid(messageId)) return res.status(400).json({ error: 'Invalid message id' });
+
+    const conv = await conversations.findConversationById(conversationId);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+    const uid = req.user.sub;
+    if (!(await conversations.isConversationMember(conversationId, uid))) {
+      return res.status(403).json({ error: 'Not a participant' });
+    }
+
+    const list = await messages.listConversationMessagesAround(conversationId, messageId, limit);
     return res.json({ messages: list });
   } catch (err) {
     console.error(err);
