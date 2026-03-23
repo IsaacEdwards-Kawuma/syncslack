@@ -4,6 +4,7 @@ import * as workspaces from './workspaces.js';
 import * as channels from './channels.js';
 import * as conversations from './conversations.js';
 import { isValidUuid } from '../utils/ids.js';
+import * as notifications from './notifications.js';
 
 function normalizeMatch(s) {
   return String(s ?? '').trim();
@@ -97,7 +98,7 @@ export async function runMessageAutomations({ workspaceId, messageId, actorUserI
   if (!msg || msg.deleted_at) return [];
 
   const text = String(msg.content || '').toLowerCase();
-  const createdTasks = [];
+  const results = [];
   for (const r of rules) {
     // Scope: channel-only for v1.
     if (r.scope_channel_id && String(msg.channel_id) !== String(r.scope_channel_id)) continue;
@@ -113,9 +114,32 @@ export async function runMessageAutomations({ workspaceId, messageId, actorUserI
       assigneeUserId: r.task_assignee_user_id || null,
     }).catch(() => null);
 
-    if (task) createdTasks.push(task);
+    if (task) {
+      if (r.task_assignee_user_id) {
+        // Best-effort: create an in-app/web-push notification for the assignee,
+        // then let the socket layer handle real-time delivery.
+        const n = await notifications.createNotification({
+          userId: r.task_assignee_user_id,
+          type: 'task',
+          workspaceId: ws,
+          messageId: mid,
+          title: 'New automated task',
+          body: task.title || 'Task created from a message',
+        }).catch(() => null);
+
+        results.push({
+          task,
+          notifyUserId: r.task_assignee_user_id,
+          notificationId: n?.id || null,
+          workspaceId: ws,
+          messageId: mid,
+          preview: (task.title || '').slice(0, 120),
+          fromUserId: uid,
+        });
+      }
+    }
   }
 
-  return createdTasks;
+  return results;
 }
 

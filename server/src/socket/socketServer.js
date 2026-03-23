@@ -276,9 +276,37 @@ export function attachSocketIO(httpServer) {
             const ch = await channels.findChannelById(channelId);
             if (ch) {
               await notifyMentions(io, msg, userId, ch.workspace_id, channelId);
-              automations
+              const automationNotifs = await automations
                 .runMessageAutomations({ workspaceId: ch.workspace_id, messageId: msg.id, actorUserId: userId })
-                .catch(() => {});
+                .catch(() => []);
+
+              if (automationNotifs?.length) {
+                const dndCache = new Map();
+                for (const a of automationNotifs) {
+                  if (!a?.notifyUserId) continue;
+                  const dndActive = await isDndActive(a.notifyUserId, dndCache);
+
+                  const preview = String(a.preview || '').slice(0, 120);
+                  const title = 'New automated task';
+                  const body = preview || a?.task?.title || 'Task created from a message';
+
+                  if (!dndActive) {
+                    io.to(`user:${a.notifyUserId}`).emit('notification', {
+                      type: 'task',
+                      workspaceId: a.workspaceId,
+                      messageId: a.messageId,
+                      notificationId: a.notificationId,
+                      preview,
+                      fromUserId: a.fromUserId,
+                    });
+                  }
+                  await sendPushToUser(a.notifyUserId, title, body, {
+                    type: 'task',
+                    messageId: a.messageId,
+                    workspaceId: a.workspaceId,
+                  });
+                }
+              }
             }
             const payload = formatMessageDoc(msg);
             io.to(`channel:${channelId}`).emit('receive_message', payload);
@@ -326,9 +354,37 @@ export function attachSocketIO(httpServer) {
             const conv = check.conversation;
             const payload = formatMessageDoc(msg);
             await notifyMentions(io, msg, userId, conv.workspace_id, null);
-            automations
+            const automationNotifs = await automations
               .runMessageAutomations({ workspaceId: conv.workspace_id, messageId: msg.id, actorUserId: userId })
-              .catch(() => {});
+              .catch(() => []);
+
+            if (automationNotifs?.length) {
+              const dndCache = new Map();
+              for (const a of automationNotifs) {
+                if (!a?.notifyUserId) continue;
+                const dndActive = await isDndActive(a.notifyUserId, dndCache);
+
+                const preview = String(a.preview || '').slice(0, 120);
+                const title = 'New automated task';
+                const body = preview || a?.task?.title || 'Task created from a message';
+
+                if (!dndActive) {
+                  io.to(`user:${a.notifyUserId}`).emit('notification', {
+                    type: 'task',
+                    workspaceId: a.workspaceId,
+                    messageId: a.messageId,
+                    notificationId: a.notificationId,
+                    preview,
+                    fromUserId: a.fromUserId,
+                  });
+                }
+                await sendPushToUser(a.notifyUserId, title, body, {
+                  type: 'task',
+                  messageId: a.messageId,
+                  workspaceId: a.workspaceId,
+                });
+              }
+            }
             io.to(`conversation:${conversationId}`).emit('receive_message', payload);
             await emitDmNotifications(io, conv, conversationId, userId, text);
             if (typeof cb === 'function') cb({ ok: true, message: payload });

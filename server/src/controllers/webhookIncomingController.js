@@ -2,6 +2,8 @@ import * as webhooks from '../db/webhooks.js';
 import * as messages from '../db/messages.js';
 import { formatMessageDoc } from '../socket/formatMessage.js';
 import * as automations from '../db/automations.js';
+import * as users from '../db/users.js';
+import { sendPushToUser } from '../services/webPush.js';
 
 export async function incomingWebhook(req, res) {
   try {
@@ -19,7 +21,44 @@ export async function incomingWebhook(req, res) {
     });
     const io = req.app.get('io');
     if (io) io.to(`channel:${hook.channel_id}`).emit('receive_message', formatMessageDoc(msg));
-    automations.runMessageAutomations({ workspaceId: hook.workspace_id, messageId: msg.id, actorUserId: hook.created_by }).catch(() => {});
+    const automationNotifs = await automations
+      .runMessageAutomations({ workspaceId: hook.workspace_id, messageId: msg.id, actorUserId: hook.created_by })
+      .catch(() => []);
+
+    if (io && automationNotifs?.length) {
+      const dndCache = new Map();
+      for (const a of automationNotifs) {
+        if (!a?.notifyUserId) continue;
+        const uid = String(a.notifyUserId);
+        if (!dndCache.has(uid)) {
+          const u = await users.findUserById(a.notifyUserId);
+          const active = Boolean(u?.dnd_until) && new Date(u.dnd_until) > new Date();
+          dndCache.set(uid, active);
+        }
+
+        const dndActive = dndCache.get(uid);
+        const preview = String(a.preview || '').slice(0, 120);
+        const title = 'New automated task';
+        const body = preview || a?.task?.title || 'Task created from a message';
+
+        if (!dndActive) {
+          io.to(`user:${a.notifyUserId}`).emit('notification', {
+            type: 'task',
+            workspaceId: a.workspaceId,
+            messageId: a.messageId,
+            notificationId: a.notificationId,
+            preview,
+            fromUserId: a.fromUserId,
+          });
+        }
+
+        await sendPushToUser(a.notifyUserId, title, body, {
+          type: 'task',
+          messageId: a.messageId,
+          workspaceId: a.workspaceId,
+        });
+      }
+    }
     return res.json({ ok: true, messageId: msg.id });
   } catch (err) {
     console.error(err);

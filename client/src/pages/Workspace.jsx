@@ -101,6 +101,7 @@ export default function Workspace() {
   const [automationMatchPhrase, setAutomationMatchPhrase] = useState('');
   const [automationDueInMinutes, setAutomationDueInMinutes] = useState('60');
   const [automationAssigneeUserId, setAutomationAssigneeUserId] = useState('');
+  const [automationScopeChannelId, setAutomationScopeChannelId] = useState('');
   const [automationBusy, setAutomationBusy] = useState(false);
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [addGroupPick, setAddGroupPick] = useState(() => new Set());
@@ -556,7 +557,7 @@ export default function Workspace() {
     const onNotify = (n) => {
       clearTimeout(notifDebounceRef.current);
       notifDebounceRef.current = setTimeout(() => loadNotifications().catch(() => {}), 200);
-      if (n.type === 'dm' || n.type === 'mention' || n.type === 'reminder') {
+      if (n.type === 'dm' || n.type === 'mention' || n.type === 'reminder' || n.type === 'task') {
         const dndActive = user?.dndUntil && new Date(user.dndUntil) > new Date();
         if (dndActive) return;
         const showPreview = readMessagePreviewInNotif();
@@ -569,6 +570,10 @@ export default function Workspace() {
               ? showPreview
                 ? `Reminder: ${n.preview || ''}`
                 : 'You have a reminder'
+              : n.type === 'task'
+                ? showPreview
+                  ? `Task: ${n.preview || ''}`
+                  : 'You have a task'
               : showPreview
                 ? `New message: ${n.preview || ''}`
                 : 'New message';
@@ -2465,6 +2470,21 @@ export default function Workspace() {
                     ))}
                   </select>
                 </label>
+                <label className="block text-sm">
+                  Scope channel
+                  <select
+                    value={automationScopeChannelId}
+                    onChange={(e) => setAutomationScopeChannelId(e.target.value)}
+                    className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+                  >
+                    <option value="">All channels</option>
+                    {channels.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button
                   type="button"
                   disabled={automationBusy}
@@ -2479,12 +2499,13 @@ export default function Workspace() {
                         matchPhrase: automationMatchPhrase.trim(),
                         taskAssigneeUserId: automationAssigneeUserId || null,
                         taskDueInMinutes: due,
-                        scopeChannelId: null,
+                        scopeChannelId: automationScopeChannelId || null,
                       };
                       await api(`/workspaces/${workspaceId}/automations`, { method: 'POST', body: payload });
                       setAutomationMatchPhrase('');
                       setAutomationDueInMinutes('60');
                       setAutomationAssigneeUserId('');
+                      setAutomationScopeChannelId('');
                       await loadAutomations();
                     } catch (e) {
                       console.error(e);
@@ -2504,12 +2525,15 @@ export default function Workspace() {
                     const assignee = r.task_assignee_user_id
                       ? members.find((m) => m.id === r.task_assignee_user_id)?.name || 'Unassigned'
                       : 'Unassigned';
+                    const scope = r.scope_channel_id
+                      ? channels.find((c) => c.id === r.scope_channel_id)?.name || 'Specific channel'
+                      : 'All channels';
                     return (
                       <div key={r.id} className="flex items-start justify-between gap-3 py-1.5">
                         <div className="min-w-0">
                           <div className="truncate font-medium text-slate-800 dark:text-slate-100">{r.match_phrase}</div>
                           <div className="text-xs text-slate-500">
-                            Due: {r.task_due_in_minutes ? `in ${r.task_due_in_minutes} min` : 'none'} · Assignee: {assignee}
+                            Due: {r.task_due_in_minutes ? `in ${r.task_due_in_minutes} min` : 'none'} · Assignee: {assignee} · Scope: {scope}
                           </div>
                         </div>
                         <button
