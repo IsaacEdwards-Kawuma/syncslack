@@ -14,6 +14,7 @@ import { extractMentionedUserIds } from '../utils/mentions.js';
 import * as channelPrefs from '../db/channelPrefs.js';
 import * as users from '../db/users.js';
 import { sendPushToUser } from '../services/webPush.js';
+import * as automations from '../db/automations.js';
 
 const onlineByWorkspace = new Map();
 
@@ -273,7 +274,12 @@ export function attachSocketIO(httpServer) {
               alsoToChannel: atc,
             });
             const ch = await channels.findChannelById(channelId);
-            if (ch) await notifyMentions(io, msg, userId, ch.workspace_id, channelId);
+            if (ch) {
+              await notifyMentions(io, msg, userId, ch.workspace_id, channelId);
+              automations
+                .runMessageAutomations({ workspaceId: ch.workspace_id, messageId: msg.id, actorUserId: userId })
+                .catch(() => {});
+            }
             const payload = formatMessageDoc(msg);
             io.to(`channel:${channelId}`).emit('receive_message', payload);
             if (atc) {
@@ -320,6 +326,9 @@ export function attachSocketIO(httpServer) {
             const conv = check.conversation;
             const payload = formatMessageDoc(msg);
             await notifyMentions(io, msg, userId, conv.workspace_id, null);
+            automations
+              .runMessageAutomations({ workspaceId: conv.workspace_id, messageId: msg.id, actorUserId: userId })
+              .catch(() => {});
             io.to(`conversation:${conversationId}`).emit('receive_message', payload);
             await emitDmNotifications(io, conv, conversationId, userId, text);
             if (typeof cb === 'function') cb({ ok: true, message: payload });

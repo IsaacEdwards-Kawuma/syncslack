@@ -1,6 +1,7 @@
 import * as webhooks from '../db/webhooks.js';
 import * as messages from '../db/messages.js';
 import { formatMessageDoc } from '../socket/formatMessage.js';
+import * as automations from '../db/automations.js';
 
 export async function incomingWebhook(req, res) {
   try {
@@ -18,6 +19,7 @@ export async function incomingWebhook(req, res) {
     });
     const io = req.app.get('io');
     if (io) io.to(`channel:${hook.channel_id}`).emit('receive_message', formatMessageDoc(msg));
+    automations.runMessageAutomations({ workspaceId: hook.workspace_id, messageId: msg.id, actorUserId: hook.created_by }).catch(() => {});
     return res.json({ ok: true, messageId: msg.id });
   } catch (err) {
     console.error(err);

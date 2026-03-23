@@ -97,6 +97,11 @@ export default function Workspace() {
   const [callMode, setCallMode] = useState(null);
   const [auditRows, setAuditRows] = useState([]);
   const [transferUserId, setTransferUserId] = useState('');
+  const [automationRules, setAutomationRules] = useState([]);
+  const [automationMatchPhrase, setAutomationMatchPhrase] = useState('');
+  const [automationDueInMinutes, setAutomationDueInMinutes] = useState('60');
+  const [automationAssigneeUserId, setAutomationAssigneeUserId] = useState('');
+  const [automationBusy, setAutomationBusy] = useState(false);
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [addGroupPick, setAddGroupPick] = useState(() => new Set());
   const [showMention, setShowMention] = useState(false);
@@ -193,6 +198,17 @@ export default function Workspace() {
     } catch (e) {
       console.error(e);
       setPriorityTasks([]);
+    }
+  }, [workspaceId]);
+
+  const loadAutomations = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const out = await api(`/workspaces/${workspaceId}/automations`);
+      setAutomationRules(out.rules || []);
+    } catch (e) {
+      console.error(e);
+      setAutomationRules([]);
     }
   }, [workspaceId]);
 
@@ -1603,9 +1619,11 @@ export default function Workspace() {
                   try {
                     const { audit } = await api(`/workspaces/${workspaceId}/audit`);
                     setAuditRows(audit || []);
+                    await loadAutomations();
                   } catch (e) {
                     console.error(e);
                     setAuditRows([]);
+                    setAutomationRules([]);
                   }
                 })();
               }}
@@ -2404,6 +2422,116 @@ export default function Workspace() {
                   </div>
                 ))
               )}
+            </div>
+            <div className="border-t border-slate-200 pt-2 dark:border-slate-600">
+                <div className="font-semibold">Automations (message to task)</div>
+              <div className="mt-3 space-y-3">
+                <label className="block text-sm">
+                  Match phrase / emoji
+                  <input
+                    value={automationMatchPhrase}
+                    onChange={(e) => setAutomationMatchPhrase(e.target.value)}
+                    className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+                    placeholder="e.g. 🐛 or urgent"
+                  />
+                </label>
+                <label className="block text-sm">
+                  Task due
+                  <select
+                    value={automationDueInMinutes}
+                    onChange={(e) => setAutomationDueInMinutes(e.target.value)}
+                    className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+                  >
+                    <option value="0">No due date</option>
+                    <option value="30">In 30 minutes</option>
+                    <option value="60">In 1 hour</option>
+                    <option value="120">In 2 hours</option>
+                    <option value="480">In 8 hours</option>
+                    <option value="1440">Tomorrow</option>
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  Assignee
+                  <select
+                    value={automationAssigneeUserId}
+                    onChange={(e) => setAutomationAssigneeUserId(e.target.value)}
+                    className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+                  >
+                    <option value="">Unassigned</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  disabled={automationBusy}
+                  className="w-full rounded bg-violet-700 px-3 py-1.5 text-white disabled:opacity-50"
+                  onClick={async () => {
+                    if (!automationMatchPhrase.trim() || !workspaceId) return;
+                    try {
+                      setAutomationBusy(true);
+                      const dueNum = Number(automationDueInMinutes);
+                      const due = dueNum > 0 ? dueNum : null;
+                      const payload = {
+                        matchPhrase: automationMatchPhrase.trim(),
+                        taskAssigneeUserId: automationAssigneeUserId || null,
+                        taskDueInMinutes: due,
+                        scopeChannelId: null,
+                      };
+                      await api(`/workspaces/${workspaceId}/automations`, { method: 'POST', body: payload });
+                      setAutomationMatchPhrase('');
+                      setAutomationDueInMinutes('60');
+                      setAutomationAssigneeUserId('');
+                      await loadAutomations();
+                    } catch (e) {
+                      console.error(e);
+                    } finally {
+                      setAutomationBusy(false);
+                    }
+                  }}
+                >
+                  Create automation
+                </button>
+              </div>
+              <div className="mt-4 max-h-48 overflow-y-auto border-t pt-2">
+                {automationRules.length === 0 ? (
+                  <p className="text-sm text-slate-500">No automations yet.</p>
+                ) : (
+                  automationRules.map((r) => {
+                    const assignee = r.task_assignee_user_id
+                      ? members.find((m) => m.id === r.task_assignee_user_id)?.name || 'Unassigned'
+                      : 'Unassigned';
+                    return (
+                      <div key={r.id} className="flex items-start justify-between gap-3 py-1.5">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-slate-800 dark:text-slate-100">{r.match_phrase}</div>
+                          <div className="text-xs text-slate-500">
+                            Due: {r.task_due_in_minutes ? `in ${r.task_due_in_minutes} min` : 'none'} · Assignee: {assignee}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-red-600 hover:underline"
+                          onClick={async () => {
+                            if (!confirm('Delete this automation?')) return;
+                            try {
+                              await api(`/workspaces/${workspaceId}/automations/${r.id}`, { method: 'DELETE' });
+                              await loadAutomations();
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
             {myRole === 'owner' ? (
               <div className="border-t border-slate-200 pt-2 dark:border-slate-600">

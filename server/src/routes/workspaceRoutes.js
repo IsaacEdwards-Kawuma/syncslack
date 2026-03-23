@@ -16,6 +16,7 @@ import {
   leaveWorkspace,
   transferWorkspaceOwnership,
 } from '../controllers/workspaceController.js';
+import { listAutomations, createAutomation, deleteAutomation } from '../controllers/automationController.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const r = Router();
@@ -28,6 +29,9 @@ r.post('/:workspaceId/leave', leaveWorkspace);
 r.post('/:workspaceId/transfer', transferWorkspaceOwnership);
 r.get('/:workspaceId/unread-summary', getUnreadSummary);
 r.get('/:workspaceId/threads/inbox', getThreadsInbox);
+r.get('/:workspaceId/automations', listAutomations);
+r.post('/:workspaceId/automations', createAutomation);
+r.delete('/:workspaceId/automations/:ruleId', deleteAutomation);
 r.get('/:workspaceId/search', searchWorkspace);
 r.post('/:workspaceId/invites', createWorkspaceInvite);
 r.get('/:workspaceId/audit', listWorkspaceAudit);

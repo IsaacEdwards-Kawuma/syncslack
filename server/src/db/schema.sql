@@ -301,3 +301,18 @@ CREATE TABLE IF NOT EXISTS reminders (
 );
 CREATE INDEX IF NOT EXISTS idx_reminders_user_run ON reminders (user_id, run_at);
 CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (run_at, delivered_at);
+
+-- Workflow automations (message -> automatic task)
+CREATE TABLE IF NOT EXISTS message_automation_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+  created_by UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  match_phrase TEXT NOT NULL,
+  scope_channel_id UUID REFERENCES channels (id) ON DELETE SET NULL,
+  task_assignee_user_id UUID REFERENCES users (id) ON DELETE SET NULL,
+  task_due_in_minutes INT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_automation_rules_ws_enabled ON message_automation_rules (workspace_id, enabled);
+CREATE INDEX IF NOT EXISTS idx_automation_rules_scope_channel ON message_automation_rules (scope_channel_id);
