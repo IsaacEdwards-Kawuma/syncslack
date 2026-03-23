@@ -6,7 +6,7 @@ import { useSocket } from '../context/SocketContext.jsx';
 import { api, getApiBaseUrl, getPublicAssetUrl, getToken } from '../lib/api.js';
 import { readMessagePreviewInNotif } from '../lib/settingsPrefs.js';
 import Avatar from '../components/Avatar.jsx';
-import { getMentionContext, mentionsToMarkdownLinks } from '../utils/mentions.js';
+import { getMentionContext, mentionsToMarkdownLinks, mentionsToPlainText } from '../utils/mentions.js';
 import { applySlashExpansion } from '../utils/slashCommands.js';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀'];
@@ -561,10 +561,11 @@ export default function Workspace() {
         const dndActive = user?.dndUntil && new Date(user.dndUntil) > new Date();
         if (dndActive) return;
         const showPreview = readMessagePreviewInNotif();
+        const mentionPreview = n.type === 'mention' ? mentionsToPlainText(n.preview || '', members) : null;
         const text =
           n.type === 'mention'
             ? showPreview
-              ? `Mention: ${n.preview || ''}`
+              ? `Mention: ${mentionPreview || ''}`
               : 'You were mentioned'
             : n.type === 'reminder'
               ? showPreview
@@ -1628,7 +1629,9 @@ export default function Workspace() {
                 {notifications.map((n) => (
                   <div key={n.id} className="border-b border-slate-100 py-2 dark:border-slate-700">
                     <div className="font-semibold">{n.title || n.type}</div>
-                    <div className="text-slate-600 dark:text-slate-300">{n.body}</div>
+                      <div className="text-slate-600 dark:text-slate-300">
+                        {n.type === 'mention' ? mentionsToPlainText(n.body, members) : n.body}
+                      </div>
                     {!n.readAt ? (
                       <button
                         type="button"

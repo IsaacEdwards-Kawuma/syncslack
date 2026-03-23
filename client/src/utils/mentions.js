@@ -44,3 +44,18 @@ export function mentionsToMarkdownLinks(content, members) {
     return `[${label}](mention:${id})`;
   });
 }
+
+/**
+ * Replace @<uuid> mentions in plain text with @<name> for UI previews/toasts.
+ * (This is separate from `mentionsToMarkdownLinks` because toast/notification UI
+ * usually renders plain text, not Markdown/ReactMarkdown.)
+ */
+export function mentionsToPlainText(content, members) {
+  if (!content || typeof content !== 'string') return content;
+  const map = new Map((members || []).map((m) => [String(m.id).toLowerCase(), m]));
+  return content.replace(MENTION_UUID_RE, (full, id) => {
+    const m = map.get(id.toLowerCase());
+    const label = m ? m.name.replace(/[\[\]]/g, '') : `${id.slice(0, 8)}…`;
+    return `@${label}`;
+  });
+}
