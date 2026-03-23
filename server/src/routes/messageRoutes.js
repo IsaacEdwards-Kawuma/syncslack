@@ -16,6 +16,9 @@ import {
   unpinMessageHandler,
   saveMessageHandler,
   unsaveMessageHandler,
+  resolveThreadHandler,
+  unresolveThreadHandler,
+  // around handlers
 } from '../controllers/messageController.js';
 import { authMiddleware } from '../middleware/auth.js';
 
@@ -31,6 +34,8 @@ r.get('/channel/:channelId/thread/:messageId', listThreadReplies);
 r.get('/conversation/:conversationId/thread/:messageId', listThreadReplies);
 r.get('/conversation/:conversationId/messages', listConversationMessages);
 r.get('/conversation/:conversationId/messages/around/:messageId', listConversationMessagesAround);
+r.post('/:messageId/resolve-thread', resolveThreadHandler);
+r.delete('/:messageId/resolve-thread', unresolveThreadHandler);
 r.post('/:messageId/pin', pinMessageHandler);
 r.delete('/:messageId/pin', unpinMessageHandler);
 r.post('/:messageId/save', saveMessageHandler);

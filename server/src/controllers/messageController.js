@@ -7,6 +7,7 @@ import * as savedMessages from '../db/savedMessages.js';
 import * as readState from '../db/readState.js';
 import { emitMessageUpdated } from '../socket/socketServer.js';
 import { isValidUuid } from '../utils/ids.js';
+import * as threads from '../db/threads.js';
 
 async function canAccessChannel(ch, userId) {
   if (!(await workspaces.isMember(ch.workspace_id, userId))) return false;
@@ -17,8 +18,26 @@ async function canAccessChannel(ch, userId) {
 
 export async function markReadHandler(req, res) {
   try {
-    const { channelId, conversationId } = req.body || {};
+    const { channelId, conversationId, threadRootId } = req.body || {};
     const uid = req.user.sub;
+    if (threadRootId) {
+      if (!isValidUuid(threadRootId)) return res.status(400).json({ error: 'Invalid threadRootId' });
+      // Access is enforced by checking the root message owner scope.
+      const parent = await messages.findMessageById(threadRootId);
+      if (!parent || parent.deletedAt) return res.status(404).json({ error: 'Thread not found' });
+      if (parent.channelId) {
+        const channel = await channels.findChannelById(parent.channelId);
+        if (!channel || !(await canAccessChannel(channel, uid))) return res.status(403).json({ error: 'Not allowed' });
+      } else if (parent.conversationId) {
+        if (!(await conversations.isConversationMember(parent.conversationId, uid))) {
+          return res.status(403).json({ error: 'Not allowed' });
+        }
+      } else {
+        return res.status(400).json({ error: 'Invalid thread' });
+      }
+      await threads.markThreadRead(uid, threadRootId);
+      return res.json({ ok: true });
+    }
     if (channelId) {
       if (!isValidUuid(channelId)) return res.status(400).json({ error: 'Invalid channel id' });
       const ch = await channels.findChannelById(channelId);
@@ -39,6 +58,30 @@ export async function markReadHandler(req, res) {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Failed to mark read' });
+  }
+}
+
+export async function resolveThreadHandler(req, res) {
+  try {
+    const { messageId } = req.params;
+    if (!isValidUuid(messageId)) return res.status(400).json({ error: 'Invalid message id' });
+    await threads.resolveThread(messageId, req.user.sub);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to resolve thread' });
+  }
+}
+
+export async function unresolveThreadHandler(req, res) {
+  try {
+    const { messageId } = req.params;
+    if (!isValidUuid(messageId)) return res.status(400).json({ error: 'Invalid message id' });
+    await threads.unresolveThread(messageId);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to unresolve thread' });
   }
 }
 

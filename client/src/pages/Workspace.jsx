@@ -108,6 +108,11 @@ export default function Workspace() {
   const [savedList, setSavedList] = useState([]);
   const [unreadChannels, setUnreadChannels] = useState(() => new Set());
   const [unreadConversations, setUnreadConversations] = useState(() => new Set());
+  const [showThreadsModal, setShowThreadsModal] = useState(false);
+  const [threadsInbox, setThreadsInbox] = useState([]);
+  const [threadsUnreadCount, setThreadsUnreadCount] = useState(0);
+  const [showPriorityModal, setShowPriorityModal] = useState(false);
+  const [priorityTasks, setPriorityTasks] = useState([]);
   const [searchScope, setSearchScope] = useState('');
   const [searchDateFrom, setSearchDateFrom] = useState('');
   const [searchDateTo, setSearchDateTo] = useState('');
@@ -164,6 +169,30 @@ export default function Workspace() {
       setUnreadConversations(new Set(s.unreadConversations || []));
     } catch (e) {
       console.error(e);
+    }
+  }, [workspaceId]);
+
+  const loadThreadsInbox = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const out = await api(`/workspaces/${workspaceId}/threads/inbox?limit=50`);
+      setThreadsInbox(out.items || []);
+      setThreadsUnreadCount(out.counts?.unread || 0);
+    } catch (e) {
+      console.error(e);
+      setThreadsInbox([]);
+      setThreadsUnreadCount(0);
+    }
+  }, [workspaceId]);
+
+  const loadPriorityTasks = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const out = await api(`/tasks/workspaces/${workspaceId}/priority`);
+      setPriorityTasks(out.tasks || []);
+    } catch (e) {
+      console.error(e);
+      setPriorityTasks([]);
     }
   }, [workspaceId]);
 
@@ -388,6 +417,20 @@ export default function Workspace() {
   }, [workspaceId, loadUnread]);
 
   useEffect(() => {
+    if (!showThreadsModal) return;
+    loadThreadsInbox();
+    const id = setInterval(() => loadThreadsInbox().catch(() => {}), 45000);
+    return () => clearInterval(id);
+  }, [showThreadsModal, loadThreadsInbox]);
+
+  useEffect(() => {
+    if (!showPriorityModal) return;
+    loadPriorityTasks();
+    const id = setInterval(() => loadPriorityTasks().catch(() => {}), 45000);
+    return () => clearInterval(id);
+  }, [showPriorityModal, loadPriorityTasks]);
+
+  useEffect(() => {
     if (!channelId && !conversationId) return;
     const body = channelId ? { channelId } : { conversationId };
     api('/messages/mark-read', { method: 'POST', body })
@@ -486,7 +529,7 @@ export default function Workspace() {
     const onNotify = (n) => {
       clearTimeout(notifDebounceRef.current);
       notifDebounceRef.current = setTimeout(() => loadNotifications().catch(() => {}), 200);
-      if (n.type === 'dm' || n.type === 'mention') {
+      if (n.type === 'dm' || n.type === 'mention' || n.type === 'reminder') {
         const dndActive = user?.dndUntil && new Date(user.dndUntil) > new Date();
         if (dndActive) return;
         const showPreview = readMessagePreviewInNotif();
@@ -495,9 +538,13 @@ export default function Workspace() {
             ? showPreview
               ? `Mention: ${n.preview || ''}`
               : 'You were mentioned'
-            : showPreview
-              ? `New message: ${n.preview || ''}`
-              : 'New message';
+            : n.type === 'reminder'
+              ? showPreview
+                ? `Reminder: ${n.preview || ''}`
+                : 'You have a reminder'
+              : showPreview
+                ? `New message: ${n.preview || ''}`
+                : 'New message';
         setToast({ text });
         setTimeout(() => setToast(null), 4000);
       }
@@ -1451,6 +1498,28 @@ export default function Workspace() {
           >
             Saved
           </button>
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-sm sm:text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+            title="Threads inbox"
+            onClick={async () => {
+              setShowThreadsModal(true);
+              await loadThreadsInbox().catch(() => {});
+            }}
+          >
+            🧵 Threads{threadsUnreadCount ? ` (${threadsUnreadCount})` : ''}
+          </button>
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-sm sm:text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+            title="Priority inbox"
+            onClick={async () => {
+              setShowPriorityModal(true);
+              await loadPriorityTasks().catch(() => {});
+            }}
+          >
+            ⚡ Priority{priorityTasks.length ? ` (${priorityTasks.length})` : ''}
+          </button>
           {(channelId || conversationId) && workspaceId ? (
             <div className="flex flex-wrap items-center gap-1">
               <button
@@ -1744,14 +1813,38 @@ export default function Workspace() {
                   <div className="text-sm font-semibold">Thread</div>
                   <div className="truncate text-sm sm:text-xs text-slate-500 dark:text-slate-400">Reply in this side panel</div>
                 </div>
-                <button
-                  type="button"
-                  className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:hover:bg-slate-800"
-                  onClick={() => setThreadParent(null)}
-                  aria-label="Close thread"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2">
+                  {threadParent ? (
+                    <button
+                      type="button"
+                      className="rounded px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                      onClick={async () => {
+                        try {
+                          if (threadParent.resolved) {
+                            await api(`/messages/${threadParent.id}/resolve-thread`, { method: 'DELETE' });
+                          } else {
+                            await api(`/messages/${threadParent.id}/resolve-thread`, { method: 'POST' });
+                          }
+                          setThreadParent((prev) => (prev ? { ...prev, resolved: !prev.resolved } : prev));
+                          await loadThreadsInbox();
+                        } catch (e) {
+                          console.error(e);
+                        }
+                      }}
+                      title={threadParent.resolved ? 'Mark unresolved' : 'Resolve this thread'}
+                    >
+                      {threadParent.resolved ? 'Unresolve' : 'Resolve'}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:hover:bg-slate-800"
+                    onClick={() => setThreadParent(null)}
+                    aria-label="Close thread"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2">
                 <div className="rounded-lg border border-slate-200 bg-white/80 p-2 text-xs dark:border-slate-600 dark:bg-slate-900/80">
@@ -1931,6 +2024,174 @@ export default function Workspace() {
                   </div>
                 </div>
                 <div className="mt-1 whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300">{m.content}</div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      ) : null}
+
+      {showThreadsModal ? (
+        <Modal title="Threads inbox" onClose={() => setShowThreadsModal(false)}>
+          <div className="max-h-72 space-y-2 overflow-y-auto text-sm">
+            {threadsInbox.length === 0 ? <p className="text-slate-500">No thread activity yet.</p> : null}
+            {threadsInbox.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className="flex w-full items-start gap-2 rounded-lg border border-slate-200 p-2 text-left hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                onClick={async () => {
+                  setShowThreadsModal(false);
+                  try {
+                    if (t.channelId) {
+                      setConversationId(null);
+                      setDmPeer(null);
+                      setGroupConv(null);
+                      setChannelId(t.channelId);
+                    } else if (t.conversationId) {
+                      setChannelId(null);
+                      setConversationId(t.conversationId);
+                      if (workspaceId) {
+                        const { conversations: convs } = await api(
+                          `/conversations/workspace/${workspaceId}/conversations`
+                        );
+                        setConversations(convs);
+                        const cv = convs.find((c) => c.id === t.conversationId);
+                        if (cv) {
+                          if (cv.kind === 'group') {
+                            setGroupConv({ title: cv.title, participants: cv.participants });
+                            setDmPeer(null);
+                          } else {
+                            setGroupConv(null);
+                            setDmPeer(cv.otherUser);
+                          }
+                        }
+                      }
+                    }
+                    setThreadParent({
+                      id: t.id,
+                      content: t.content,
+                      createdAt: t.createdAt,
+                      senderId: t.senderId,
+                      sender: t.sender,
+                      channelId: t.channelId || null,
+                      conversationId: t.conversationId || null,
+                      threadParentId: null,
+                      resolved: t.resolved,
+                    });
+                    await api('/messages/mark-read', { method: 'POST', body: { threadRootId: t.id } });
+                    await loadThreadsInbox();
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+              >
+                <Avatar user={t.sender} size={7} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="truncate font-semibold text-slate-800 dark:text-slate-100">{t.sender?.name || 'Unknown'}</div>
+                    <div className="text-xs text-slate-500">{formatTime(t.createdAt)}</div>
+                    {t.unread ? (
+                      <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
+                        Unread
+                      </span>
+                    ) : null}
+                    {t.mentioned ? (
+                      <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-900/40 dark:text-violet-200">
+                        Mentioned
+                      </span>
+                    ) : null}
+                    {t.resolved ? (
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                        Resolved
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 truncate text-slate-600 dark:text-slate-300">{t.content}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      ) : null}
+
+      {showPriorityModal ? (
+        <Modal title="Priority inbox" onClose={() => setShowPriorityModal(false)}>
+          <div className="max-h-72 space-y-2 overflow-y-auto text-sm">
+            {priorityTasks.length === 0 ? <p className="text-slate-500">No priority tasks in the next 24 hours.</p> : null}
+            {priorityTasks.map((t) => (
+              <div key={t.id} className="rounded-lg border border-slate-200 p-2 dark:border-slate-600">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-slate-800 dark:text-slate-100">{t.title}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Due: {t.dueAt ? new Date(t.dueAt).toLocaleString() : '—'} · Priority {t.priority}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      type="button"
+                      className="rounded bg-violet-700 px-2 py-1 text-xs text-white hover:bg-violet-600"
+                      onClick={async () => {
+                        try {
+                          setShowPriorityModal(false);
+                          setThreadParent(null);
+                          skipNextMessageFetchRef.current = true;
+                          setPendingMessageScroll(t.sourceMessageId);
+                          if (t.channelId) {
+                            setConversationId(null);
+                            setDmPeer(null);
+                            setGroupConv(null);
+                            setChannelId(t.channelId);
+                            const { messages: list } = await api(
+                              `/messages/channel/${t.channelId}/messages/around/${t.sourceMessageId}?limit=80`
+                            );
+                            setMessages(list);
+                          } else if (t.conversationId && workspaceId) {
+                            setChannelId(null);
+                            setConversationId(t.conversationId);
+                            const { conversations: convs } = await api(
+                              `/conversations/workspace/${workspaceId}/conversations`
+                            );
+                            setConversations(convs);
+                            const cv = convs.find((c) => c.id === t.conversationId);
+                            if (cv) {
+                              if (cv.kind === 'group') {
+                                setGroupConv({ title: cv.title, participants: cv.participants });
+                                setDmPeer(null);
+                              } else {
+                                setGroupConv(null);
+                                setDmPeer(cv.otherUser);
+                              }
+                            }
+                            const { messages: list } = await api(
+                              `/messages/conversation/${t.conversationId}/messages/around/${t.sourceMessageId}?limit=80`
+                            );
+                            setMessages(list);
+                          }
+                        } catch (e) {
+                          console.error(e);
+                          skipNextMessageFetchRef.current = false;
+                        }
+                      }}
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200"
+                      onClick={async () => {
+                        try {
+                          await api(`/tasks/${t.id}`, { method: 'PATCH', body: { status: 'done' } });
+                          await loadPriorityTasks();
+                        } catch (e) {
+                          console.error(e);
+                        }
+                      }}
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -2356,6 +2617,37 @@ function MentionLink({ href, children, members, workspaceId, selfId }) {
 function MessageBlock({ message, members = [], selfId, workspaceId, onReaction, onThread, compact, groupWithPrev }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskDueInMinutes, setTaskDueInMinutes] = useState('60');
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [remindInMinutes, setRemindInMinutes] = useState('60');
+
+  async function createTask() {
+    try {
+      const dueInMinutesNum = taskDueInMinutes ? Number(taskDueInMinutes) : null;
+      await api(`/tasks/${message.id}/from-message`, {
+        method: 'POST',
+        body: { dueInMinutes: dueInMinutesNum, assigneeUserId: selfId },
+      });
+      setShowTaskModal(false);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function createReminder() {
+    try {
+      const minutesNum = Number(remindInMinutes);
+      if (!Number.isFinite(minutesNum) || minutesNum <= 0) return;
+      await api(`/reminders/${message.id}/from-message`, {
+        method: 'POST',
+        body: { minutes: minutesNum },
+      });
+      setShowReminderModal(false);
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   async function copyText() {
     try {
@@ -2403,7 +2695,8 @@ function MessageBlock({ message, members = [], selfId, workspaceId, onReaction, 
   const showHeader = compact || !groupWithPrev;
 
   return (
-    <div
+    <>
+      <div
       data-message-id={message.id}
       className={`group flex gap-3 rounded-xl px-2 transition-colors duration-150 ${groupWithPrev && !compact ? '-mt-0.5 py-0' : 'py-1'} hover:bg-slate-50/90 dark:hover:bg-slate-800/80 ${compact ? 'text-sm' : ''}`}
     >
@@ -2562,6 +2855,24 @@ function MessageBlock({ message, members = [], selfId, workspaceId, onReaction, 
               Save
             </button>
           ) : null}
+          {!message.deletedAt ? (
+            <button
+              type="button"
+              className="text-sm sm:text-xs text-slate-500 hover:underline"
+              onClick={() => setShowTaskModal(true)}
+            >
+              Task
+            </button>
+          ) : null}
+          {!message.deletedAt ? (
+            <button
+              type="button"
+              className="text-sm sm:text-xs text-slate-500 hover:underline"
+              onClick={() => setShowReminderModal(true)}
+            >
+              Remind
+            </button>
+          ) : null}
           {mine && !message.deletedAt ? (
             <>
               <button
@@ -2592,6 +2903,69 @@ function MessageBlock({ message, members = [], selfId, workspaceId, onReaction, 
           </div>
         ) : null}
       </div>
-    </div>
+      </div>
+      {showTaskModal ? (
+        <Modal title="Create task" onClose={() => setShowTaskModal(false)}>
+          <div className="space-y-3">
+            <div className="text-sm text-slate-600 dark:text-slate-300">
+              Task from: <span className="font-semibold">{message.content ? message.content.slice(0, 80) : 'Attachment'}</span>
+            </div>
+            <label className="block text-sm">
+              Due
+              <select
+                value={taskDueInMinutes}
+                onChange={(e) => setTaskDueInMinutes(e.target.value)}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+              >
+                <option value="0">No due date</option>
+                <option value="30">In 30 minutes</option>
+                <option value="60">In 1 hour</option>
+                <option value="120">In 2 hours</option>
+                <option value="480">In 8 hours</option>
+                <option value="1440">Tomorrow</option>
+                <option value="10080">Next week</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="w-full rounded bg-violet-700 py-2 text-white"
+              onClick={() => createTask()}
+            >
+              Create task
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+      {showReminderModal ? (
+        <Modal title="Set reminder" onClose={() => setShowReminderModal(false)}>
+          <div className="space-y-3">
+            <div className="text-sm text-slate-600 dark:text-slate-300">
+              Reminder for: <span className="font-semibold">{message.content ? message.content.slice(0, 80) : 'Attachment'}</span>
+            </div>
+            <label className="block text-sm">
+              Remind me
+              <select
+                value={remindInMinutes}
+                onChange={(e) => setRemindInMinutes(e.target.value)}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+              >
+                <option value="15">In 15 minutes</option>
+                <option value="30">In 30 minutes</option>
+                <option value="60">In 1 hour</option>
+                <option value="240">In 4 hours</option>
+                <option value="1440">Tomorrow</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="w-full rounded bg-violet-700 py-2 text-white"
+              onClick={() => createReminder()}
+            >
+              Create reminder
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+    </>
   );
 }

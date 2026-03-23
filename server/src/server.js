@@ -24,6 +24,9 @@ import messageRoutes from './routes/messageRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
+import taskRoutes from './routes/taskRoutes.js';
+import reminderRoutes from './routes/reminderRoutes.js';
+import { startReminderWorker } from './services/reminderWorker.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Load .env from server/ regardless of process cwd. */
@@ -97,6 +100,8 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/reminders', reminderRoutes);
 app.use('/api/webhooks', webhookPublicRoutes);
 app.get('/api/link-preview', authMiddleware, linkPreview);
 
@@ -144,6 +149,7 @@ async function main() {
   const io = attachSocketIO(httpServer);
   app.set('io', io);
   await setupRedisAdapter(io);
+  startReminderWorker(io);
 
   /** Render and most PaaS require binding to 0.0.0.0, not only localhost. */
   httpServer.on('error', (err) => {

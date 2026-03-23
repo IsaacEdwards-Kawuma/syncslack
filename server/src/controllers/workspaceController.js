@@ -11,6 +11,7 @@ import {
 import { publicAppBaseUrl } from '../utils/mail.js';
 import { isValidUuid } from '../utils/ids.js';
 import * as readState from '../db/readState.js';
+import * as threads from '../db/threads.js';
 
 async function canManageWorkspace(workspaceId, userId) {
   const role = await workspaces.getMemberRole(workspaceId, userId);
@@ -201,6 +202,22 @@ export async function getUnreadSummary(req, res) {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Failed to load unread state' });
+  }
+}
+
+export async function getThreadsInbox(req, res) {
+  try {
+    const { workspaceId } = req.params;
+    if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace id' });
+    if (!(await workspaces.isMember(workspaceId, req.user.sub))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const out = await threads.listThreadInbox(workspaceId, req.user.sub, limit);
+    return res.json(out);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to load threads' });
   }
 }
 

@@ -255,3 +255,49 @@ CREATE TABLE IF NOT EXISTS user_conversation_reads (
   PRIMARY KEY (user_id, conversation_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_conv_reads_user ON user_conversation_reads (user_id);
+
+-- Thread triage (Slack-like inbox for message threads)
+CREATE TABLE IF NOT EXISTS thread_reads (
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  thread_root_message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+  last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, thread_root_message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_thread_reads_user ON thread_reads (user_id);
+
+CREATE TABLE IF NOT EXISTS thread_resolutions (
+  thread_root_message_id UUID PRIMARY KEY REFERENCES messages (id) ON DELETE CASCADE,
+  resolved_by UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  resolved_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Tasks (message -> task)
+CREATE TABLE IF NOT EXISTS tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+  source_message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status VARCHAR(20) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'done')),
+  priority INT NOT NULL DEFAULT 3 CHECK (priority >= 1 AND priority <= 5),
+  due_at TIMESTAMPTZ,
+  assignee_user_id UUID REFERENCES users (id) ON DELETE SET NULL,
+  created_by UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_workspace_status_due ON tasks (workspace_id, status, due_at);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee_due ON tasks (assignee_user_id, due_at);
+
+-- Reminders
+CREATE TABLE IF NOT EXISTS reminders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  workspace_id UUID NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+  message_id UUID REFERENCES messages (id) ON DELETE CASCADE,
+  run_at TIMESTAMPTZ NOT NULL,
+  delivered_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_user_run ON reminders (user_id, run_at);
+CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (run_at, delivered_at);
