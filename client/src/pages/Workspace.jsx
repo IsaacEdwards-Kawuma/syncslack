@@ -1035,14 +1035,15 @@ export default function Workspace() {
               <button
                 key={tab}
                 type="button"
-                className={`rounded px-2 py-1 text-sm sm:text-[10px] uppercase ${
+                className={`flex items-center justify-center rounded px-2 py-1 text-sm sm:text-[10px] ${
                   searchTab === tab
                     ? 'bg-[#1164a3] text-white'
                     : 'bg-white/10 text-[#d1d2d3] hover:bg-white/15'
                 }`}
                 onClick={() => setSearchTab(tab)}
+                title={tab}
               >
-                {tab}
+                {tab === 'messages' ? '💬' : tab === 'channels' ? '#' : '👥'}
               </button>
             ))}
           </div>
