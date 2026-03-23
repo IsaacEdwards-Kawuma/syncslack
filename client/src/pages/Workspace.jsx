@@ -412,9 +412,20 @@ export default function Workspace() {
 
   useEffect(() => {
     if (!workspaceId) return;
+    loadPriorityTasks();
+  }, [workspaceId, loadPriorityTasks]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
     const id = setInterval(() => loadUnread(), 45000);
     return () => clearInterval(id);
   }, [workspaceId, loadUnread]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const id = setInterval(() => loadPriorityTasks().catch(() => {}), 45000);
+    return () => clearInterval(id);
+  }, [workspaceId, loadPriorityTasks]);
 
   useEffect(() => {
     if (!showThreadsModal) return;
